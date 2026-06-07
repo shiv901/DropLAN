@@ -1,9 +1,9 @@
 /**
  * QRPanel — displays the QR code, LAN URL, and copy button
- * Fetches server info via Electron IPC
+ * Fetches server info via Electron IPC with retry logic
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import type { ServerInfo } from '@droplan/types';
 
 export function QRPanel(): JSX.Element {
@@ -11,19 +11,40 @@ export function QRPanel(): JSX.Element {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
 
-  const fetchInfo = useCallback(async () => {
-    try {
-      const result = (await window.electron?.invoke('app:getServerInfo')) as ServerInfo;
-      setInfo(result);
-      setError(false);
-    } catch {
-      setError(true);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchInfo();
-  }, [fetchInfo]);
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 30; // 30 × 500ms = 15 seconds
+
+    const tryFetch = async () => {
+      if (cancelled) return;
+      attempts++;
+      try {
+        const result = (await window.electron?.invoke('app:getServerInfo')) as
+          | ServerInfo
+          | undefined;
+        if (result?.qrDataUrl && !cancelled) {
+          setInfo(result);
+          setError(false);
+          return; // success — stop retrying
+        }
+      } catch {
+        /* IPC not ready yet */
+      }
+
+      if (cancelled) return;
+      if (attempts < maxAttempts) {
+        setTimeout(tryFetch, 500);
+      } else {
+        setError(true);
+      }
+    };
+
+    tryFetch();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const copyUrl = async () => {
     if (!info?.lanUrl) return;

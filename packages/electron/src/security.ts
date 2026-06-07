@@ -24,6 +24,7 @@ const ALLOWED_SEND_CHANNELS: Set<keyof IpcSendChannels> = new Set([
   'transfer:progress',
   'transfer:complete',
   'error:fatal',
+  'file:received',
 ]);
 
 /**

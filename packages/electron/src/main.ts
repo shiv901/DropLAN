@@ -8,6 +8,7 @@
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
+import { get as httpGet } from 'http';
 import { networkInterfaces, hostname } from 'os';
 import QRCode from 'qrcode';
 import type { ServerStatusMessage, ServerInfo } from '@droplan/types';
@@ -41,19 +42,52 @@ const lanIp = getLanIp();
 const lanUrl = `http://${lanIp}:${SERVER_PORT}`;
 
 /* ------------------------------------------------------------------ */
+/*  Vite readiness check (dev mode only)                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Poll a URL until it responds successfully.
+ * Uses Node's built-in http module (always available in Electron main process),
+ * not global fetch which may be unavailable or behave differently.
+ */
+async function waitForUrl(url: string, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await new Promise<boolean>((resolve) => {
+      const req = httpGet(url, () => {
+        resolve(true);
+      });
+      req.on('error', () => resolve(false));
+      req.setTimeout(1000, () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+    if (ready) return; // URL is responding
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+  }
+  // Timeout — proceed anyway; Electron will show its own error if Vite isn't ready
+}
+
+/* ------------------------------------------------------------------ */
 /*  Window                                                              */
 /* ------------------------------------------------------------------ */
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
     minWidth: 800,
     minHeight: 580,
     titleBarStyle: 'hiddenInset',
+    // Position macOS traffic lights so they sit neatly in the 48px titlebar
+    // and don't overlap the header content (which has 80px left padding).
+    trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       contextIsolation: true,
-      sandbox: true,
+      // sandbox:false is required so the preload's require('./security') resolves correctly.
+      // Security is maintained by contextIsolation:true + nodeIntegration:false.
+      sandbox: false,
       nodeIntegration: false,
       webSecurity: true,
       preload: join(__dirname, 'preload.js'),
@@ -62,6 +96,8 @@ function createWindow(): void {
 
   const devUrl = process.env['VITE_DEV_SERVER_URL'];
   if (devUrl) {
+    // Wait for Vite before loading so the preload script runs on a live page.
+    await waitForUrl(devUrl);
     mainWindow.loadURL(devUrl);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
@@ -125,7 +161,10 @@ function setupIpcHandlers(): void {
 function setupEventHandlers(): void {
   app.on('ready', () => {
     setupIpcHandlers();
-    createWindow();
+    // createWindow is async; catch to prevent unhandled rejection
+    createWindow().catch((err: unknown) => {
+      console.error('[electron] Failed to create window:', err);
+    });
   });
 
   app.on('window-all-closed', () => {
@@ -136,7 +175,9 @@ function setupEventHandlers(): void {
 
   app.on('activate', () => {
     if (mainWindow === null) {
-      createWindow();
+      createWindow().catch((err: unknown) => {
+        console.error('[electron] Failed to recreate window:', err);
+      });
     }
   });
 }

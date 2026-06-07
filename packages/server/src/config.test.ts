@@ -16,6 +16,7 @@ describe('Server Configuration', () => {
 
   it('should have proper defaults', () => {
     expect(config.server.host).toBe('0.0.0.0');
-    expect(config.env).toBe('development');
+    // vitest sets NODE_ENV=test; in production it defaults to 'development'
+    expect(['development', 'test']).toContain(config.env);
   });
 });

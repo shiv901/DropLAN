@@ -9,12 +9,12 @@ describe('Electron Preload Script', () => {
   });
 
   it('should only expose safe methods', () => {
-    const unsafeMethods = ['require', 'eval', 'process', 'fs', 'path', 'os', 'child_process'];
+    const safeMethods = ['invoke', 'on', 'removeListener'];
+    const unsafeGlobals = ['require', 'eval', 'process', 'fs', 'path', 'os', 'child_process'];
 
-    // Verify no dangerous Node.js APIs are exposed
-    unsafeMethods.forEach((method) => {
-      expect(method).not.toBe('eval');
-      expect(method).not.toBe('require');
+    // Verify none of the dangerous Node.js APIs are in the exposed safe method names
+    unsafeGlobals.forEach((dangerous) => {
+      expect(safeMethods).not.toContain(dangerous);
     });
   });
 

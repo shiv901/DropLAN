@@ -7,7 +7,7 @@
   "private": true,
   "scripts": {
     "dev": "node ../../dist/server/main.js",
-    "build": "tsc",
+    "build": "tsc && cp -r src/browser-ui ../../dist/server/browser-ui",
     "build:watch": "tsc --watch --preserveWatchOutput",
     "start": "node ../../dist/server/main.js",
     "test": "vitest"
