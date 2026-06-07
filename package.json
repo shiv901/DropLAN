@@ -1,0 +1,33 @@
+{
+  "name": "droplan",
+  "version": "0.1.0",
+  "description": "Secure local-network file transfer application",
+  "private": true,
+  "workspaces": [
+    "packages/types",
+    "packages/server",
+    "packages/client",
+    "packages/electron"
+  ],
+  "scripts": {
+    "dev": "npm run build --workspace=packages/electron && npm run build --workspace=packages/server && concurrently \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\" \"npm run dev --workspace=packages/electron\"",
+    "build": "npm run build --workspaces",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "type-check": "tsc --noEmit",
+    "ci": "npm run type-check && npm run lint && npm run format:check"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.1.0"
+  }
+}

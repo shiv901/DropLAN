@@ -1,0 +1,711 @@
+================================================================================
+                    PHASE 1 - DETAILED TASK BREAKDOWN
+                  Duration: 2 Weeks | Total Effort: ~58 Hours
+================================================================================
+
+TASK CATEGORIES & DEPENDENCIES:
+
+┌─ INFRASTRUCTURE (7 tasks, 18 hours)
+│  ├─ repo-setup ..................... Initialize monorepo with workspaces (3h)
+│  ├─ ts-config ....................... TypeScript strict configuration (2h)
+│  ├─ eslint-setup .................... ESLint & prettier (2h)
+│  ├─ ipc-types ....................... IPC message type definitions (3h)
+│  ├─ dev-script ...................... npm run dev concurrent start (3h)
+│  ├─ vscode-debug .................... VS Code debugging config (2h)
+│  └─ testing-setup ................... Vitest configuration (3h)
+│
+├─ ELECTRON (5 tasks, 14 hours)
+│  ├─ electron-main ................... Main process + window management (4h)
+│  ├─ electron-preload ................ Preload script + contextBridge (3h)
+│  ├─ electron-security ............... Verify security settings (2h)
+│  ├─ ipc-server-channel .............. Server status IPC handler (3h)
+│  └─ ipc-lifecycle ................... Start/stop server from React (2h)
+│
+├─ FRONTEND (6 tasks, 16 hours)
+│  ├─ react-setup ..................... Vite + React + TS (3h)
+│  ├─ tailwind-setup .................. Tailwind CSS integration (2h)
+│  ├─ zustand-setup ................... Zustand store init (2h)
+│  ├─ react-query-setup ............... React Query config (2h)
+│  ├─ app-shell ....................... App.tsx layout + components (4h)
+│  └─ ipc-frontend-hook ............... useServer hook for IPC (3h)
+│
+├─ BACKEND (4 tasks, 9 hours)
+│  ├─ express-init .................... Express server + port selection (3h)
+│  ├─ health-endpoint ................. GET /health endpoint (2h)
+│  ├─ logging-setup ................... Logger infrastructure (2h)
+│  └─ error-middleware ................ Error handling middleware (2h)
+│
+└─ SECURITY (1 task, 1 hour)
+   └─ security-audit-p1 .............. Phase 1 security checklist (1h)
+
+================================================================================
+                         DETAILED TASK SPECIFICATIONS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+[1] REPO SETUP - Initialize Monorepo
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Create monorepo structure with npm workspaces
+
+Actions:
+  1. Create project directory structure:
+     /DropLAN
+     ├── /packages
+     │   ├── /server       (Express + Transfer Engine)
+     │   ├── /client       (React Frontend)
+     │   ├── /electron     (Electron Main Process)
+     │   └── /types        (Shared TypeScript Definitions)
+     ├── /docs             (Already exists)
+     ├── package.json      (Root with workspaces config)
+     └── .gitignore
+
+  2. Root package.json:
+     {
+       "name": "dropLAN",
+       "version": "0.1.0",
+       "private": true,
+       "workspaces": [
+         "packages/*"
+       ],
+       "scripts": {
+         "dev": "concurrently 'npm:dev -r --workspaces'",
+         "build": "npm run build --workspaces",
+         "test": "npm run test --workspaces"
+       },
+       "devDependencies": {
+         "concurrently": "^8.0.0",
+         "typescript": "^5.0.0"
+       }
+     }
+
+  3. Create package.json in each workspace with proper names
+
+DOD:
+  ☐ Directory structure created
+  ☐ Root package.json uses npm workspaces
+  ☐ npm install succeeds without errors
+  ☐ All workspaces have independent package.json
+  ☐ Dependencies install only in needed workspaces
+  ☐ .gitignore excludes node_modules, dist, build
+
+──────────────────────────────────────────────────────────────────────────────
+[2] TYPESCRIPT STRICT CONFIGURATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Enable TypeScript strict mode in all workspaces
+
+Actions:
+  1. Create tsconfig.json in root:
+     {
+       "compilerOptions": {
+         "strict": true,
+         "noImplicitAny": true,
+         "strictNullChecks": true,
+         "strictFunctionTypes": true,
+         "noUnusedLocals": true,
+         "noUnusedParameters": true,
+         "noImplicitReturns": true,
+         "noFallthroughCasesInSwitch": true,
+         "esModuleInterop": true,
+         "moduleResolution": "node",
+         "resolveJsonModule": true,
+         "declaration": true,
+         "declarationMap": true,
+         "sourceMap": true,
+         "target": "ES2020",
+         "module": "ESNext",
+         "lib": ["ES2020", "DOM", "DOM.Iterable"]
+       }
+     }
+
+  2. Create tsconfig.json in each workspace (extends root)
+  
+  3. Test: npx tsc --noEmit in each workspace
+
+DOD:
+  ☐ Root tsconfig.json created with strict mode
+  ☐ Each workspace has tsconfig.json extending root
+  ☐ npx tsc --noEmit passes in all workspaces
+  ☐ No implicit any warnings
+  ☐ No unused variables/parameters warnings
+
+──────────────────────────────────────────────────────────────────────────────
+[3] ESLINT & PRETTIER SETUP
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Consistent code style across monorepo
+
+Actions:
+  1. Install in root:
+     npm install -D eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin prettier eslint-config-prettier
+
+  2. Create .eslintrc.json in root:
+     {
+       "root": true,
+       "parser": "@typescript-eslint/parser",
+       "extends": [
+         "eslint:recommended",
+         "plugin:@typescript-eslint/recommended",
+         "prettier"
+       ],
+       "rules": {
+         "@typescript-eslint/no-unused-vars": "error",
+         "@typescript-eslint/explicit-function-return-types": "warn",
+         "no-console": ["warn", { "allow": ["warn", "error", "info"] }]
+       }
+     }
+
+  3. Create .prettierrc in root:
+     {
+       "singleQuote": true,
+       "trailingComma": "es5",
+       "tabWidth": 2,
+       "semi": true,
+       "printWidth": 100
+     }
+
+  4. Add scripts to root package.json:
+     "lint": "eslint . --ext .ts,.tsx",
+     "format": "prettier --write ."
+
+DOD:
+  ☐ ESLint installed and configured
+  ☐ Prettier installed and configured
+  ☐ npm run lint passes
+  ☐ npm run format works
+  ☐ Pre-commit hook ready (will add later)
+
+──────────────────────────────────────────────────────────────────────────────
+[4] IPC TYPES - Type Definitions
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Create type-safe IPC message definitions
+
+Location: /packages/types/src/ipc.ts
+
+Content:
+  export interface ServerStatus {
+    ready: boolean;
+    port: number;
+    ipAddress?: string;
+    error?: string;
+  }
+
+  export interface IpcChannels {
+    'server:status': ServerStatus;
+    'server:start': void;
+    'server:stop': void;
+    'settings:get': Record<string, unknown>;
+    'settings:set': { key: string; value: unknown };
+  }
+
+  // Type-safe IPC handler wrapper
+  export type IpcHandler<K extends keyof IpcChannels> = (
+    value: IpcChannels[K]
+  ) => Promise<void> | void;
+
+DOD:
+  ☐ /packages/types/src/ipc.ts created
+  ☐ All IPC message types defined
+  ☐ Both electron and client can import
+  ☐ TypeScript strict checks pass
+
+──────────────────────────────────────────────────────────────────────────────
+[5] ELECTRON MAIN PROCESS
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Create Electron main process with secure configuration
+
+Location: /packages/electron/src/main.ts
+
+Requirements:
+  ✓ contextIsolation = true
+  ✓ sandbox = true
+  ✓ nodeIntegration = false
+  ✓ webSecurity = true
+  ✓ enableRemoteModule = false
+  ✓ Window persists size/position
+
+Key responsibilities:
+  - Create BrowserWindow
+  - Load React app (dev URL or built files)
+  - Setup security settings
+  - Setup IPC channels
+  - Handle app lifecycle (quit, activate, etc)
+
+DOD:
+  ☐ Electron app launches without errors
+  ☐ All security settings verified
+  ☐ Window persists dimensions across restarts
+  ☐ Can load both dev (http://localhost:5173) and prod builds
+  ☐ No console warnings about deprecated APIs
+
+──────────────────────────────────────────────────────────────────────────────
+[6] ELECTRON PRELOAD SCRIPT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Safely expose IPC methods to renderer
+
+Location: /packages/electron/src/preload.ts
+
+Content:
+  import { contextBridge, ipcRenderer } from 'electron';
+  import type { IpcChannels } from '../types/ipc';
+
+  const ipcApi = {
+    on: <K extends keyof IpcChannels>(
+      channel: K,
+      listener: (value: IpcChannels[K]) => void
+    ) => {
+      ipcRenderer.on(channel, (_, value) => listener(value));
+    },
+    invoke: <K extends keyof IpcChannels>(
+      channel: K,
+      ...args: any[]
+    ): Promise<IpcChannels[K]> => {
+      return ipcRenderer.invoke(channel, ...args);
+    },
+    send: <K extends keyof IpcChannels>(
+      channel: K,
+      value: IpcChannels[K]
+    ) => {
+      ipcRenderer.send(channel, value);
+    },
+  };
+
+  contextBridge.exposeInMainWorld('electron', ipcApi);
+
+DOD:
+  ☐ Preload script created and typed
+  ☐ contextBridge properly isolates context
+  ☐ Only IPC methods exposed (no Node APIs)
+  ☐ React can call window.electron.* safely
+
+──────────────────────────────────────────────────────────────────────────────
+[7] REACT + VITE SETUP
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Initialize React app with Vite
+
+Location: /packages/client
+
+Actions:
+  1. npm create vite@latest . -- --template react-ts
+  
+  2. Create vite.config.ts:
+     - dev server on port 5173
+     - source maps enabled
+     - minify on build
+     - no external dependencies
+
+  3. Setup React Query devtools
+
+  4. Create /src directory structure:
+     /src
+     ├── components/       (UI components)
+     ├── features/         (Feature-specific logic)
+     ├── hooks/            (Custom hooks)
+     ├── services/         (API calls, external services)
+     ├── stores/           (Zustand stores)
+     ├── types/            (TypeScript types)
+     ├── utils/            (Utility functions)
+     ├── App.tsx           (Root component)
+     └── main.tsx          (Entry point)
+
+DOD:
+  ☐ Vite React app initialized
+  ☐ npm run dev starts HMR
+  ☐ TypeScript compiles without errors
+  ☐ Tailwind ready for integration
+  ☐ no-unused-vars eslint passes
+
+──────────────────────────────────────────────────────────────────────────────
+[8] TAILWIND CSS INTEGRATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Setup Tailwind CSS for styling
+
+Actions:
+  1. npm install -D tailwindcss postcss autoprefixer
+  
+  2. npx tailwindcss init -p
+  
+  3. Configure tailwind.config.js:
+     content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}']
+
+  4. Create /src/globals.css:
+     @tailwind base;
+     @tailwind components;
+     @tailwind utilities;
+
+  5. Import in App.tsx
+
+DOD:
+  ☐ Tailwind CSS installed
+  ☐ Configuration applied to App
+  ☐ Test utility classes work (e.g., className="flex p-4")
+  ☐ npm run dev renders styled components
+
+──────────────────────────────────────────────────────────────────────────────
+[9] ZUSTAND STATE MANAGEMENT SETUP
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Initialize Zustand for client state
+
+Location: /packages/client/src/stores/appStore.ts
+
+Content:
+  import { create } from 'zustand';
+  import { devtools } from 'zustand/middleware';
+
+  interface AppState {
+    serverPort: number | null;
+    serverReady: boolean;
+    setServerPort: (port: number) => void;
+    setServerReady: (ready: boolean) => void;
+  }
+
+  export const useAppStore = create<AppState>()(
+    devtools((set) => ({
+      serverPort: null,
+      serverReady: false,
+      setServerPort: (port) => set({ serverPort: port }),
+      setServerReady: (ready) => set({ serverReady: ready }),
+    }))
+  );
+
+DOD:
+  ☐ Zustand installed and configured
+  ☐ DevTools working in React DevTools
+  ☐ Store properly typed
+  ☐ React components can use hooks
+
+──────────────────────────────────────────────────────────────────────────────
+[10] REACT QUERY CONFIGURATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Setup React Query for server state
+
+Location: /packages/client/src/services/queryClient.ts
+
+Content:
+  import { QueryClient } from '@tanstack/react-query';
+
+  export const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        gcTime: 1000 * 60 * 10,   // 10 minutes (formerly cacheTime)
+      },
+    },
+  });
+
+  // Use in App.tsx with QueryClientProvider
+
+DOD:
+  ☐ React Query installed
+  ☐ QueryClient configured globally
+  ☐ DevTools available for inspection
+  ☐ Ready for API integration in Phase 2
+
+──────────────────────────────────────────────────────────────────────────────
+[11] APP SHELL COMPONENT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Create basic layout with header and placeholder sections
+
+Location: /packages/client/src/App.tsx
+
+Layout:
+  ┌─────────────────────────────────────────┐
+  │  DropLAN | Server: 127.0.0.1:3420      │  <- Header
+  ├──────────┬──────────────────────────────┤
+  │          │                              │
+  │ Sidebar  │  Main Content                │
+  │  (TODO)  │  (Dashboard Placeholder)     │
+  │          │                              │
+  └──────────┴──────────────────────────────┘
+
+DOD:
+  ☐ App.tsx renders without errors
+  ☐ Header displays app name and server status
+  ☐ Responsive layout works
+  ☐ Sidebar placeholder shows
+  ☐ Main content area shows placeholder
+
+──────────────────────────────────────────────────────────────────────────────
+[12] EXPRESS SERVER INITIALIZATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Setup Express server with port auto-selection
+
+Location: /packages/server/src/server.ts
+
+Key features:
+  - Auto-select port in range 3000-3999
+  - Bind to 0.0.0.0
+  - CORS configured for local network
+  - Environment: NODE_ENV=development
+  - Log all requests
+
+DOD:
+  ☐ Server starts on available port
+  ☐ Console logs actual port
+  ☐ CORS allows 10.*, 172.16-31.*, 192.168.*
+  ☐ Server emits 'ready' event with port
+  ☐ Can handle multiple instances (different ports)
+
+──────────────────────────────────────────────────────────────────────────────
+[13] HEALTH CHECK ENDPOINT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Implement GET /health endpoint
+
+Endpoint:
+  GET /health
+  
+Response (200):
+  {
+    "status": "ok",
+    "port": 3420,
+    "uptime": 12345,
+    "timestamp": "2026-05-31T18:30:00Z"
+  }
+
+DOD:
+  ☐ GET /health returns 200
+  ☐ Response includes port and status
+  ☐ Can be used by Electron to verify server
+  ☐ No authentication required
+
+──────────────────────────────────────────────────────────────────────────────
+[14] LOGGING INFRASTRUCTURE
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Setup structured logging (no passwords/tokens)
+
+Location: /packages/server/src/logger.ts
+
+Features:
+  - Levels: info, warn, error
+  - Never log passwords, tokens, file contents
+  - Include timestamp, level, message
+  - Log to console and file (logs/ directory)
+
+DOD:
+  ☐ Logger can log info/warn/error
+  ☐ Logs include timestamp and level
+  ☐ No sensitive data logged
+  ☐ Can filter log output for security audit
+
+──────────────────────────────────────────────────────────────────────────────
+[15] ERROR HANDLING MIDDLEWARE
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Global error handler for Express
+
+Features:
+  - Catch all errors in middleware chain
+  - Return meaningful error responses
+  - Log errors (without sensitive data)
+  - 404 handling for unknown routes
+
+DOD:
+  ☐ Global error handler installed
+  ☐ Unknown routes return 404
+  ☐ Errors logged appropriately
+  ☐ Client receives error messages without stack traces
+
+──────────────────────────────────────────────────────────────────────────────
+[16] IPC SERVER STATUS CHANNEL
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Main process sends server status to React via IPC
+
+Implementation:
+  1. Express server emits 'ready' event with port
+  2. Main process listens for event
+  3. Main process sends via ipcMain.handle('server:status')
+  4. React can invoke and receive port/status
+
+DOD:
+  ☐ React can call await window.electron.invoke('server:status')
+  ☐ Returns { ready: true, port: 3420 }
+  ☐ Main process listens to server readiness
+  ☐ Status updates on server start/stop
+
+──────────────────────────────────────────────────────────────────────────────
+[17] REACT IPC HOOK (useServer)
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: React hook for server status
+
+Location: /packages/client/src/hooks/useServer.ts
+
+Usage:
+  const { port, ready, error } = useServer();
+
+Implementation:
+  - On mount: invoke 'server:status'
+  - Listen to 'server:status' updates
+  - Store in Zustand
+  - Cleanup on unmount
+
+DOD:
+  ☐ Hook can get server port
+  ☐ Hook detects server ready state
+  ☐ Hook handles errors gracefully
+  ☐ Works in multiple components
+
+──────────────────────────────────────────────────────────────────────────────
+[18] IPC LIFECYCLE MANAGEMENT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Start/stop server from React via IPC
+
+Flows:
+  1. React button click: window.electron.invoke('server:start')
+  2. Main process: Start Express server
+  3. Server emits 'ready'
+  4. Main process sends update via IPC
+  5. React receives and updates UI
+
+DOD:
+  ☐ Can start server from React
+  ☐ Can stop server from React
+  ☐ Status updates in real-time
+  ☐ Server persists across React HMR
+
+──────────────────────────────────────────────────────────────────────────────
+[19] CONCURRENCY DEVELOPMENT SCRIPT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: npm run dev starts all services
+
+Script (in root package.json):
+  "dev": "concurrently -n server,electron,client 'npm run dev -w packages/server' 'npm run dev -w packages/electron' 'npm run dev -w packages/client'"
+
+DOD:
+  ☐ npm run dev starts all services
+  ☐ Outputs from all services visible
+  ☐ HMR works for React
+  ☐ Electron reloads on changes
+  ☐ Server logs visible
+
+──────────────────────────────────────────────────────────────────────────────
+[20] VS CODE DEBUGGING CONFIGURATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Enable debugging in VS Code
+
+File: /.vscode/launch.json
+
+Configurations:
+  1. Electron main process debugger
+  2. Node server debugger
+  3. Chrome DevTools for renderer
+
+DOD:
+  ☐ Can debug Electron main process
+  ☐ Can set breakpoints in main.ts
+  ☐ Can debug server (server.ts)
+  ☐ Chrome DevTools works for renderer
+
+──────────────────────────────────────────────────────────────────────────────
+[21] VITEST CONFIGURATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Setup unit testing framework
+
+Location: Root vitest.config.ts
+
+Setup:
+  - Vitest configured globally
+  - Example test files created
+  - Coverage reporting ready
+  - Can run: npm test
+
+DOD:
+  ☐ Vitest installed and configured
+  ☐ Example test passes
+  ☐ npm test runs all tests
+  ☐ Coverage reporting works
+
+──────────────────────────────────────────────────────────────────────────────
+[22] ELECTRON SECURITY VERIFICATION
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Verify all security settings are correct
+
+Checklist:
+  ☐ contextIsolation = true
+  ☐ sandbox = true
+  ☐ nodeIntegration = false
+  ☐ webSecurity = true
+  ☐ enableRemoteModule = false (if Electron 12+)
+  ☐ preloadURL correct
+  ☐ No eval() or Function() constructors
+  ☐ No dangerouslySetInnerHTML
+  ☐ No hardcoded credentials or secrets
+
+Verification method:
+  1. Launch app
+  2. Open Chrome DevTools (Ctrl+Shift+I)
+  3. Check console for security warnings
+  4. Verify window.electron exists but window.require doesn't
+
+──────────────────────────────────────────────────────────────────────────────
+[23] PHASE 1 SECURITY AUDIT
+──────────────────────────────────────────────────────────────────────────────
+
+Objective: Comprehensive Phase 1 security checklist
+
+Items to verify:
+  ☐ No console.log() calls with sensitive data
+  ☐ No hardcoded API keys or credentials
+  ☐ CORS correctly restricts origins
+  ☐ Electron security settings locked
+  ☐ No npm packages with known vulnerabilities
+  ☐ TypeScript strict mode enabled
+  ☐ All environment variables validated
+
+Command:
+  npm audit (check vulnerabilities)
+  npm run lint (check code quality)
+
+================================================================================
+                         EXECUTION SEQUENCE
+================================================================================
+
+Week 1:
+  Day 1-2:  Tasks 1-3 (Repo setup, TypeScript, ESLint)
+  Day 3-4:  Tasks 4, 12-15 (Types, Express, Logging)
+  Day 5:    Tasks 5-7 (Electron, React setup)
+
+Week 2:
+  Day 6-7:  Tasks 8-11 (Tailwind, Zustand, React Query, Shell)
+  Day 8-9:  Tasks 16-20 (IPC, dev script, debugging)
+  Day 10:   Tasks 21-23 (Testing, security audit)
+
+================================================================================
+                           SUCCESS CRITERIA
+================================================================================
+
+✅ Phase 1 Complete When:
+
+1. ✓ npm install && npm run dev succeeds without errors
+2. ✓ Electron app opens with blank React frontend
+3. ✓ Server starts and binds to available port
+4. ✓ IPC communication works both directions
+5. ✓ React displays server port from Electron
+6. ✓ All TypeScript strict checks pass
+7. ✓ npm run lint passes
+8. ✓ npm run test passes (example test)
+9. ✓ HMR works (React changes reload instantly)
+10. ✓ Security checklist complete
+11. ✓ No console warnings or errors
+12. ✓ VS Code debugging works
+
+Ready to proceed? Start with task [1] REPO SETUP.
+
