@@ -1,229 +1,124 @@
-#!/bin/bash
+# DropLAN — Command Reference
 
-# DropLAN Project - Essential Commands Guide
+## 🚀 Start the App
 
-# Run this file for quick reference: chmod +x commands.sh && ./commands.sh
+```bash
+npm run dev
+```
 
-echo "╔════════════════════════════════════════════════════════════════════════════╗"
-echo "║ DropLAN Project - Essential Commands & Project Status ║"
-echo "╚════════════════════════════════════════════════════════════════════════════╝"
-echo ""
+Starts three services concurrently and opens the Electron window:
 
-echo "📋 QUICK START - 3 Ways to Run the Project"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+| Label | Service | Address |
+|---|---|---|
+| `[0]` | Express file server | `http://localhost:3000` |
+| `[1]` | Vite React dev server | `http://localhost:5173` |
+| `[2]` | Electron desktop window | — |
 
-echo "1️⃣ FULL STACK (All services - Recommended)"
-echo " Command: npm run dev"
-echo " Starts:"
-echo " • Electron app (native window)"
-echo " • Express server (http://localhost:3000)"
-echo " • React dev server (http://localhost:5173)"
-echo ""
+> The `predev` script automatically kills any stale processes on ports 3000 and 5173 before starting.
 
-echo "2️⃣ CLIENT ONLY (React development)"
-echo " Command: npm run dev --workspace=packages/client"
-echo " Starts: Vite on http://localhost:5173 with HMR"
-echo ""
+---
 
-echo "3️⃣ SERVER ONLY (Express + Socket.IO)"
-echo " Command: npm run dev --workspace=packages/server"
-echo " Starts: Server on http://localhost:3000"
-echo ""
+## 🔨 Build
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+```bash
+# Build all packages
+npm run build
 
-echo "✅ QUALITY & BUILD COMMANDS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+# Build individual packages
+npm run build --workspace=packages/electron
+npm run build --workspace=packages/server
+npm run build --workspace=packages/client
+```
 
-echo "Type Check (TypeScript validation):"
-echo " npm run type-check"
-echo ""
+---
 
-echo "Lint Code (ESLint):"
-echo " npm run lint"
-echo ""
+## 🧪 Test
 
-echo "Format Code (Prettier - auto-fix):"
-echo " npm run format"
-echo ""
+```bash
+# Run all 51 tests (one-shot)
+npm test -- --run
 
-echo "Full CI Pipeline (type-check → lint → format):"
-echo " npm run ci"
-echo ""
+# Watch mode
+npm test
 
-echo "Build All Packages:"
-echo " npm run build"
-echo ""
+# Single package
+npm test --workspace=packages/server -- --run
+npm test --workspace=packages/client -- --run
+npm test --workspace=packages/electron -- --run
+```
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+---
 
-echo "🧪 TESTING COMMANDS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+## 🔍 Code Quality
 
-echo "Run All Tests:"
-echo " npm run test"
-echo ""
+```bash
+# TypeScript strict-mode check (zero errors)
+npm run type-check
 
-echo "Test Individual Packages:"
-echo " npm run test --workspace=packages/client"
-echo " npm run test --workspace=packages/server"
-echo " npm run test --workspace=packages/types"
-echo " npm run test --workspace=packages/electron"
-echo ""
+# ESLint
+npm run lint
+npm run lint:fix      # auto-fix
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+# Prettier
+npm run format        # write fixes
+npm run format:check  # check only
 
-echo "🔍 API TESTING (After starting server)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+# Full CI pipeline (runs all of the above)
+npm run ci
+```
 
-echo "Health Check:"
-echo " curl http://localhost:3000/api/health"
-echo " Expected: {\"status\":\"ok\",\"timestamp\":\"...\"}"
-echo ""
+---
 
-echo "Server Status:"
-echo " curl http://localhost:3000/api/status"
-echo " Expected: {\"status\":\"running\",\"port\":3000,\"version\":\"0.1.0\"}"
-echo ""
+## 🌐 API Endpoints (server on :3000)
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+```bash
+# Health check
+curl http://localhost:3000/api/health
 
-echo "📦 INDIVIDUAL PACKAGE COMMANDS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+# Server info (hostname, version)
+curl http://localhost:3000/api/info
 
-echo "Client Package:"
-echo " npm run dev --workspace=packages/client # Start dev server"
-echo " npm run build --workspace=packages/client # Production build"
-echo " npm run test --workspace=packages/client # Run tests"
-echo ""
+# List received files
+curl http://localhost:3000/api/files
 
-echo "Server Package:"
-echo " npm run dev --workspace=packages/server # Start server"
-echo " npm run build --workspace=packages/server # Compile TypeScript"
-echo " npm run test --workspace=packages/server # Run tests"
-echo ""
+# Download a file
+curl http://localhost:3000/api/files/<id>/download -o filename
 
-echo "Electron Package:"
-echo " npm run dev --workspace=packages/electron # Start Electron"
-echo " npm run build --workspace=packages/electron # Build app"
-echo ""
+# Delete a file
+curl -X DELETE http://localhost:3000/api/files/<id>
 
-echo "Types Package:"
-echo " npm run test --workspace=packages/types # Run type tests"
-echo ""
+# Browser upload UI (for phones)
+open http://localhost:3000/
+```
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+---
 
-echo "📊 CURRENT PROJECT STATUS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+## 🛠️ Troubleshoot
 
-echo "Phase 1 Progress: 12/23 tasks (52%)"
-echo ""
+```bash
+# Kill stale processes on ports 3000 / 5173
+lsof -ti:3000,5173 | xargs kill -9
 
-echo "What's Working:"
-echo " ✅ Monorepo structure (4 workspaces)"
-echo " ✅ TypeScript strict mode"
-echo " ✅ React + Vite with HMR"
-echo " ✅ Tailwind CSS"
-echo " ✅ Zustand state management"
-echo " ✅ React Query + Axios"
-echo " ✅ Express server"
-echo " ✅ Socket.IO ready"
-echo " ✅ Configuration management"
-echo " ✅ Logging system"
-echo " ✅ 17 test cases passing"
-echo ""
+# Reinstall all dependencies
+rm -rf node_modules package-lock.json
+npm install
 
-echo "Build Output:"
-echo " • Client: 54.47 kB (gzipped)"
-echo " • CSS: 1.68 kB (gzipped)"
-echo " • Test cases: 17 passing"
-echo ""
+# Check TypeScript
+npm run type-check
 
-echo "Quality:"
-echo " • TypeScript: ✅ Strict mode"
-echo " • ESLint: ✅ 0 errors"
-echo " • Prettier: ✅ 100% compliant"
-echo ""
+# Check compiled output
+ls dist/electron/   # main.js, preload.js
+ls dist/server/     # main.js, routes/, browser-ui/
+```
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+---
 
-echo "🚀 RECOMMENDED WORKFLOW"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
+## 📂 Where Files Are Saved
 
-echo "1. Check quality before starting development:"
-echo " npm run ci"
-echo ""
+Uploaded files land in:
 
-echo "2. Start full development server:"
-echo " npm run dev"
-echo ""
+```
+~/Downloads/DropLAN/<uuid>-<originalname>
+```
 
-echo "3. Open in browser:"
-echo " http://localhost:5173 (React app)"
-echo ""
-
-echo "4. Test APIs (in separate terminal):"
-echo " curl http://localhost:3000/api/health"
-echo ""
-
-echo "5. Before committing:"
-echo " npm run ci # Ensures no broken code"
-echo ""
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "💾 USEFUL FILES & DOCS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "Main Documentation:"
-echo " • /docs/RUNNING_PROJECT.md - Detailed guide"
-echo " • /docs/PLANNING/plan.md - Roadmap"
-echo " • /docs/SECURITY.md - Security details"
-echo " • /docs/PHASE_1_TASKS_8-12_COMPLETE.md - Latest progress"
-echo ""
-
-echo "Key Source Files:"
-echo " • /packages/client/src/api/ - HTTP client & React Query"
-echo " • /packages/client/src/stores/ - Zustand state stores"
-echo " • /packages/server/src/server.ts - Express + Socket.IO"
-echo " • /packages/types/src/ipc.ts - Type definitions"
-echo ""
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "🎯 NEXT STEPS"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "Remaining Phase 1 tasks (13-23):"
-echo " □ [13] Server Routes (Upload/Download)"
-echo " □ [14] IPC Integration"
-echo " □ [15] Transfer Engine"
-echo " □ [16] QR Code Generation"
-echo " □ [17] UI Components"
-echo " □ [18] Error Handling"
-echo " □ [19-23] Testing & Final QA"
-echo ""
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-echo "Ready to start? Run: npm run dev 🚀"
-echo ""
+Example: `~/Downloads/DropLAN/15f26b9a-photo.jpg`

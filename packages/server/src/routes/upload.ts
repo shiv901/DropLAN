@@ -7,7 +7,7 @@ import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { join } from 'path';
 import { homedir } from 'os';
-import { mkdirSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { registerFile } from '../store/fileStore.js';
 import { logger } from '../logger.js';
@@ -22,8 +22,38 @@ export function ensureUploadDir(): void {
 }
 
 /**
- * Create multer storage that streams directly to disk
- * Uses a UUID-based filename to avoid collisions / path traversal
+ * Build a safe, human-readable filename for a given destination directory.
+ *
+ * Strategy (mirrors macOS Finder behaviour):
+ *   1. Sanitise the original name (strip path separators & control chars)
+ *   2. Use it as-is if the file does not already exist
+ *   3. If it does exist, append ` (2)`, ` (3)` … before the extension
+ *   4. Fall back to a UUID prefix only if the sanitised name is empty
+ */
+function uniqueFilename(dir: string, originalname: string): string {
+  // Strip directory traversal characters and control characters; keep spaces
+  const safe = originalname.replace(/[\/\\\x00-\x1f]/g, '_').trim();
+  const base = safe || randomUUID(); // UUID fallback for unnamed files
+
+  // Split into stem + extension (e.g. "photo.jpg" → ["photo", ".jpg"])
+  const lastDot = base.lastIndexOf('.');
+  const stem = lastDot > 0 ? base.slice(0, lastDot) : base;
+  const ext = lastDot > 0 ? base.slice(lastDot) : '';
+
+  // Try the original name first, then add a counter suffix if needed
+  let candidate = base;
+  let counter = 2;
+  while (existsSync(`${dir}/${candidate}`)) {
+    candidate = `${stem} (${counter})${ext}`;
+    counter++;
+  }
+
+  return candidate;
+}
+
+/**
+ * Create multer storage that streams directly to disk.
+ * Filenames preserve the original name; duplicates get a " (2)" suffix.
  */
 function createStorage(): multer.StorageEngine {
   return multer.diskStorage({
@@ -31,9 +61,7 @@ function createStorage(): multer.StorageEngine {
       cb(null, UPLOAD_DIR);
     },
     filename: (_req, file, cb) => {
-      // UUID prefix prevents path traversal & collisions; we keep original name in metadata
-      const safeName = `${randomUUID()}-${file.originalname.replace(/[^a-zA-Z0-9._\- ]/g, '_')}`;
-      cb(null, safeName);
+      cb(null, uniqueFilename(UPLOAD_DIR, file.originalname));
     },
   });
 }
