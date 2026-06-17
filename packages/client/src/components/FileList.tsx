@@ -1,9 +1,13 @@
 /**
- * FileList — shows received files, allows download and delete
- * Polls GET /api/files and listens for file:received Socket.IO events
+ * FileList — shows received files with Electron-native actions:
+ *   - "Reveal" opens the file highlighted in macOS Finder (replaces download)
+ *   - "Open Folder" opens ~/Downloads/DropLAN in Finder
+ *   - Delete shows an inline confirmation before making the API call
+ * Real-time updates via Socket.IO (file:received / file:removed events)
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import type { Socket } from 'socket.io-client';
 import type { ReceivedFile } from '@droplan/types';
 
 function formatBytes(bytes: number): string {
@@ -35,13 +39,21 @@ function fileIcon(name: string): string {
   return icons[ext] ?? '📎';
 }
 
+/** True when running inside the Electron shell (contextBridge exposed) */
+const isElectron = !!window.electron;
+
 interface Props {
   serverPort: number;
+  socket: Socket | null;
+  disabled?: boolean;
+  /** Called when user clicks Open Folder — fires app:openDownloadFolder IPC */
+  onOpenFolder?: () => void;
 }
 
-export function FileList({ serverPort }: Props): JSX.Element {
+export function FileList({ serverPort, socket, disabled = false, onOpenFolder }: Props): JSX.Element {
   const [files, setFiles] = useState<ReceivedFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const baseUrl = `http://localhost:${serverPort}`;
 
@@ -57,81 +69,152 @@ export function FileList({ serverPort }: Props): JSX.Element {
     }
   }, [baseUrl]);
 
+  // Polling fallback
   useEffect(() => {
     fetchFiles();
     const interval = setInterval(fetchFiles, 5000);
     return () => clearInterval(interval);
   }, [fetchFiles]);
 
-  // Listen for real-time file:received events from Electron IPC
+  // Real-time updates via Socket.IO
   useEffect(() => {
-    const handler = (_event: unknown, data: unknown) => {
-      const file = data as ReceivedFile;
+    if (!socket) return;
+
+    const onReceived = (file: ReceivedFile) => {
       setFiles((prev) => [file, ...prev.filter((f) => f.id !== file.id)]);
     };
-    window.electron?.on('file:received', handler);
-    return () => {
-      window.electron?.removeListener('file:received', handler);
-    };
-  }, []);
 
-  const deleteFile = async (id: string) => {
+    const onRemoved = ({ id }: { id: string }) => {
+      setFiles((prev) => prev.filter((f) => f.id !== id));
+    };
+
+    socket.on('file:received', onReceived);
+    socket.on('file:removed', onRemoved);
+
+    return () => {
+      socket.off('file:received', onReceived);
+      socket.off('file:removed', onRemoved);
+    };
+  }, [socket]);
+
+  const revealInFinder = (diskPath: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    void (window.electron?.invoke as any)('app:revealFile', diskPath);
+  };
+
+  const confirmDelete = (id: string) => setConfirmDeleteId(id);
+  const cancelDelete = () => setConfirmDeleteId(null);
+
+  const executeDelete = async (id: string) => {
+    setConfirmDeleteId(null);
     try {
       await fetch(`${baseUrl}/api/files/${id}`, { method: 'DELETE' });
       setFiles((prev) => prev.filter((f) => f.id !== id));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   };
 
   if (loading) {
-    return (
-      <div className="file-list-empty">
-        <div className="spinner" />
-      </div>
-    );
-  }
-
-  if (files.length === 0) {
-    return (
-      <div className="file-list-empty">
-        <span className="empty-icon">📭</span>
-        <p>No files received yet</p>
-        <small>Scan the QR code to start uploading</small>
-      </div>
-    );
+    return <div className="file-list-empty"><div className="spinner" /></div>;
   }
 
   return (
-    <div className="file-list">
-      {files.map((file) => (
-        <div key={file.id} className="file-item">
-          <span className="file-item-icon">{fileIcon(file.name)}</span>
-          <div className="file-item-info">
-            <div className="file-item-name" title={file.name}>{file.name}</div>
-            <div className="file-item-meta">
-              {formatBytes(file.size)} · {timeAgo(file.receivedAt)}
-            </div>
-          </div>
-          <div className="file-item-actions">
-            <a
-              href={`${baseUrl}/api/files/${file.id}/download`}
-              download={file.name}
-              className="file-action-btn file-action-download"
-              title="Download"
-            >
-              ⬇
-            </a>
-            <button
-              className="file-action-btn file-action-delete"
-              onClick={() => deleteFile(file.id)}
-              title="Delete"
-            >
-              ✕
-            </button>
-          </div>
+    <>
+      {/* Header row with file count + open folder button */}
+      <div className="file-list-toolbar">
+        <span className="file-list-count">
+          {files.length === 0 ? 'No files yet' : `${files.length} file${files.length !== 1 ? 's' : ''}`}
+        </span>
+        {isElectron && onOpenFolder && (
+          <button
+            id="open-folder-btn"
+            className="open-folder-btn"
+            onClick={onOpenFolder}
+            title="Open ~/Downloads/DropLAN in Finder"
+          >
+            📁 Open Folder
+          </button>
+        )}
+      </div>
+
+      {files.length === 0 ? (
+        <div className="file-list-empty" style={{ flex: 1 }}>
+          <span className="empty-icon">📭</span>
+          <p>No files received yet</p>
+          <small>Scan the QR code to start uploading</small>
         </div>
-      ))}
-    </div>
+      ) : (
+        <div className="file-list">
+          {files.map((file) => {
+            const isPendingDelete = confirmDeleteId === file.id;
+            return (
+              <div key={file.id} className={`file-item${isPendingDelete ? ' file-item--confirm' : ''}`}>
+                <span className="file-item-icon">{fileIcon(file.name)}</span>
+                <div className="file-item-info">
+                  <div className="file-item-name" title={file.name}>{file.name}</div>
+                  <div className="file-item-meta">
+                    {formatBytes(file.size)} · {timeAgo(file.receivedAt)}
+                  </div>
+                </div>
+
+                {isPendingDelete ? (
+                  <div className="file-item-confirm">
+                    <span className="confirm-label">Delete this file?</span>
+                    <button
+                      id={`confirm-delete-${file.id}`}
+                      className="confirm-btn confirm-btn--yes"
+                      onClick={() => void executeDelete(file.id)}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      id={`cancel-delete-${file.id}`}
+                      className="confirm-btn confirm-btn--no"
+                      onClick={cancelDelete}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="file-item-actions">
+                    {!disabled && isElectron && file.diskPath && (
+                      /* In Electron: reveal in Finder instead of downloading */
+                      <button
+                        id={`reveal-${file.id}`}
+                        className="file-action-btn file-action-reveal"
+                        onClick={() => revealInFinder(file.diskPath!)}
+                        title="Reveal in Finder"
+                      >
+                        🔍
+                      </button>
+                    )}
+                    {!disabled && !isElectron && (
+                      /* In phone browser: show download link */
+                      <a
+                        href={`${baseUrl}/api/files/${file.id}/download`}
+                        download={file.name}
+                        className="file-action-btn file-action-download"
+                        title="Download"
+                      >
+                        ⬇
+                      </a>
+                    )}
+                    {!disabled && (
+                      <button
+                        id={`delete-${file.id}`}
+                        className="file-action-btn file-action-delete"
+                        onClick={() => confirmDelete(file.id)}
+                        title="Delete file"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

@@ -3,7 +3,7 @@
  * POST /api/upload
  */
 
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -67,6 +67,43 @@ function createStorage(): multer.StorageEngine {
 }
 
 /**
+ * Middleware: track raw bytes received and emit upload:progress via Socket.IO.
+ * Uses Node.js EventEmitter semantics — adding a 'data' listener does not
+ * interfere with multer's pipe-based stream processing.
+ */
+function trackProgress(
+  io: SocketIOServer
+): (req: Request, _res: Response, next: NextFunction) => void {
+  return (req, _res, next) => {
+    const totalStr = req.headers['content-length'];
+    if (!totalStr) return next();
+    const total = parseInt(totalStr, 10);
+    if (!total || isNaN(total)) return next();
+
+    const uploadId = randomUUID();
+    let received = 0;
+
+    io.emit('upload:progress', { uploadId, pct: 0, received: 0, total });
+
+    req.on('data', (chunk: Buffer) => {
+      received += chunk.length;
+      io.emit('upload:progress', {
+        uploadId,
+        pct: Math.min(99, Math.round((received / total) * 100)),
+        received,
+        total,
+      });
+    });
+
+    req.on('end', () => {
+      io.emit('upload:progress', { uploadId, pct: 100, received: total, total });
+    });
+
+    next();
+  };
+}
+
+/**
  * Create and return upload router
  * @param io - Socket.IO server instance for real-time notifications
  */
@@ -83,7 +120,7 @@ export function createUploadRouter(io: SocketIOServer): Router {
    * POST /api/upload
    * Accepts single or multiple files as multipart/form-data field "files"
    */
-  router.post('/upload', upload.array('files', 50), (req: Request, res: Response) => {
+  router.post('/upload', trackProgress(io), upload.array('files', 50), (req: Request, res: Response) => {
     const uploadedFiles = req.files as Express.Multer.File[];
 
     if (!uploadedFiles || uploadedFiles.length === 0) {

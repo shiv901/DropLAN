@@ -1,0 +1,76 @@
+appId: com.droplan.app
+productName: DropLAN
+copyright: Copyright © 2026
+
+# electron-builder needs an exact version (not a semver range like ^27.0.0)
+# Pin to whatever is installed in node_modules
+electronVersion: "27.3.11"
+
+# Override package.json fields inside the packaged bundle.
+# The monorepo main is "../../dist/electron/main.js" (correct for dev),
+# but inside the .app the compiled main.js is at the bundle root.
+extraMetadata:
+  main: main.js
+
+# Output goes to packages/electron/dist/release/
+directories:
+  output: dist/release
+  buildResources: build
+
+# Main Electron entry — from: paths are relative to packages/electron/
+files:
+  - from: ../../dist/electron
+    to: .
+    filter:
+      - '**/*.js'
+  # electron-builder requires package.json to be present in the asar bundle
+  - package.json
+
+# Bundle server + client as extra resources inside the .app bundle
+# Accessible at runtime via process.resourcesPath
+extraResources:
+  - from: ../../dist/server
+    to: server
+    filter:
+      - '**/*'
+      - '!**/*.test.js'
+      - '!**/*.d.ts'
+      - '!**/*.map'
+  - from: ../../packages/client/dist
+    to: client
+
+# macOS
+mac:
+  category: public.app-category.utilities
+  # Remove icon line until an icon.icns is created — electron-builder uses a default otherwise
+  # icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  # Disable hardened runtime in dev builds — requires Apple signing certs for notarization
+  hardenedRuntime: false
+
+dmg:
+  title: DropLAN
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 150
+      y: 190
+      type: file
+    - x: 390
+      y: 190
+      type: link
+      path: /Applications
+
+# Linux (future)
+linux:
+  target: AppImage
+  category: Utility
+
+# Windows (future)
+win:
+  target: nsis

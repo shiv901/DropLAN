@@ -523,7 +523,7 @@
           <div class="upload-item-header">
             <span class="upload-item-name" title="${escHtml(file.name)}">${fileIcon(file.name)} ${escHtml(file.name)}</span>
             <span class="upload-item-size">${formatBytes(file.size)}</span>
-            <span class="upload-item-status uploading" id="${itemId}-status">Uploading…</span>
+            <span class="upload-item-status uploading" id="${itemId}-status">Starting…</span>
           </div>
           <div class="progress-bar">
             <div class="progress-fill" id="${itemId}-fill"></div>
@@ -536,10 +536,31 @@
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/upload');
 
+        // Speed tracking — rolling window over the last ~1 second
+        let lastLoaded = 0;
+        let lastTime = Date.now();
+        let speedBps = 0;
+
         xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            document.getElementById(`${itemId}-fill`).style.width = pct + '%';
+          if (!e.lengthComputable) return;
+
+          const pct = Math.round((e.loaded / e.total) * 100);
+          document.getElementById(`${itemId}-fill`).style.width = pct + '%';
+
+          const now = Date.now();
+          const dt = (now - lastTime) / 1000; // seconds since last update
+          if (dt >= 0.5) {
+            speedBps = (e.loaded - lastLoaded) / dt;
+            lastLoaded = e.loaded;
+            lastTime = now;
+          }
+
+          const statusEl = document.getElementById(`${itemId}-status`);
+          if (statusEl) {
+            const loaded = formatBytes(e.loaded);
+            const total = formatBytes(e.total);
+            const speed = speedBps > 0 ? ' · ' + formatBytes(speedBps) + '/s' : '';
+            statusEl.textContent = `${pct}% · ${loaded} / ${total}${speed}`;
           }
         });
 
@@ -563,13 +584,49 @@
 
         xhr.addEventListener('error', () => {
           const statusEl = document.getElementById(`${itemId}-status`);
-          statusEl.textContent = '✗ Error';
+          statusEl.textContent = '✗ Network error';
           statusEl.className = 'upload-item-status error';
           showToast(`✗ Network error uploading ${file.name}`, 'error');
         });
 
         xhr.send(formData);
       }
+
+      /* ------------------------------------------------------------------ */
+      /*  Socket.IO — real-time server:stopping notification                 */
+      /* ------------------------------------------------------------------ */
+      (function () {
+        // Load socket.io-client from the server itself (served automatically by Socket.IO)
+        const script = document.createElement('script');
+        script.src = '/socket.io/socket.io.js';
+        script.onload = () => {
+          // eslint-disable-next-line no-undef
+          const sock = io({ transports: ['websocket', 'polling'] });
+
+          sock.on('server:stopping', () => {
+            // Disable the upload zone
+            const zone = document.getElementById('drop-zone');
+            const input = document.getElementById('file-input');
+            if (zone) {
+              zone.style.opacity = '0.4';
+              zone.style.pointerEvents = 'none';
+              zone.querySelector('h2').textContent = 'Server stopped';
+              zone.querySelector('p').textContent = 'The host has stopped DropLAN';
+            }
+            if (input) input.disabled = true;
+
+            // Show persistent banner
+            showToast('🔴 Server stopped — uploads disabled', 'error');
+            const toast = document.getElementById('toast');
+            if (toast) {
+              // Keep it visible permanently
+              toast.style.transition = 'none';
+              toast.style.transform = 'translateX(-50%) translateY(0)';
+            }
+          });
+        };
+        document.head.appendChild(script);
+      })();
     </script>
   </body>
 </html>

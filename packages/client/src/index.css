@@ -102,6 +102,14 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+/* Holds StatusBar + Stop button flush-right */
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-left: auto;
   -webkit-app-region: no-drag;
 }
@@ -437,6 +445,55 @@ html, body, #root {
   background: var(--accent-glow);
 }
 
+/* ------------------------------------------------------------------ */
+/*  File list toolbar (count + open folder)                            */
+/* ------------------------------------------------------------------ */
+.file-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.file-list-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.open-folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.open-folder-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ */
+/*  File action buttons                                                 */
+/* ------------------------------------------------------------------ */
+.file-action-reveal {
+  color: var(--text-muted);
+}
+
+.file-action-reveal:hover {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
 .file-action-delete:hover {
   border-color: var(--error);
   color: var(--error);
@@ -479,4 +536,175 @@ html, body, #root {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stop-sharing button                                                 */
+/* ------------------------------------------------------------------ */
+.stop-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+  color: var(--error);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+}
+
+.stop-btn:hover {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: var(--error);
+}
+
+.stop-btn-quit {
+  margin-left: 12px;
+  font-size: 13px;
+  padding: 6px 16px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stopped banner                                                      */
+/* ------------------------------------------------------------------ */
+.stopped-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: rgba(248, 113, 113, 0.08);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.25);
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+  animation: slide-down 0.2s ease;
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Active upload progress strip                                        */
+/* ------------------------------------------------------------------ */
+.active-uploads {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.active-upload-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  animation: fade-in 0.2s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.active-upload-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.active-upload-label {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  flex: 1;
+}
+
+.active-upload-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 38px;
+  text-align: right;
+}
+
+.active-upload-bytes {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 120px;
+  text-align: right;
+}
+
+.active-upload-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.active-upload-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a78bfa);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+  min-width: 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Inline delete confirmation                                          */
+/* ------------------------------------------------------------------ */
+.file-item--confirm {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.04);
+}
+
+.file-item-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.confirm-label {
+  font-size: 12px;
+  color: var(--error);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.confirm-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.confirm-btn--yes {
+  border-color: var(--error);
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--error);
+}
+
+.confirm-btn--yes:hover {
+  background: rgba(248, 113, 113, 0.25);
+}
+
+.confirm-btn--no {
+  border-color: var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+}
+
+.confirm-btn--no:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
 }

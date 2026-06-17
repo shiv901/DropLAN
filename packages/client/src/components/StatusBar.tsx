@@ -3,7 +3,7 @@
  */
 
 interface Props {
-  status: 'disconnected' | 'connecting' | 'connected';
+  status: 'disconnected' | 'connecting' | 'connected' | 'stopped';
   port: number | null;
 }
 

@@ -25,6 +25,7 @@ export function createFilesRouter(): Router {
       name: f.name,
       size: f.size,
       receivedAt: f.receivedAt,
+      diskPath: f.diskPath, // used by Electron app to reveal in Finder
     }));
     res.json({ files });
   });

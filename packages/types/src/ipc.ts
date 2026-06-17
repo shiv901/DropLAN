@@ -22,6 +22,10 @@ export interface IpcInvokeChannels {
   'app:getVersion': void;
   'app:openDevTools': void;
   'app:getServerInfo': void;
+  /** Reveal a file in macOS Finder — arg is the absolute disk path */
+  'app:revealFile': string;
+  /** Open ~/Downloads/DropLAN in Finder */
+  'app:openDownloadFolder': void;
 }
 
 /**
@@ -82,6 +86,8 @@ export interface ReceivedFile {
   name: string;
   size: number;
   receivedAt: string; // ISO 8601
+  /** Absolute disk path — only present in Electron context, used for Reveal in Finder */
+  diskPath?: string;
 }
 
 /**

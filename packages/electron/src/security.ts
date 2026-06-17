@@ -14,6 +14,8 @@ const ALLOWED_INVOKE_CHANNELS: Set<keyof IpcInvokeChannels> = new Set([
   'app:getVersion',
   'app:openDevTools',
   'app:getServerInfo',
+  'app:revealFile',
+  'app:openDownloadFolder',
 ]);
 
 /**

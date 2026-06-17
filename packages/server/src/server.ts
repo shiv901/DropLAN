@@ -1,11 +1,12 @@
 import express, { type Express, type Request, type Response } from 'express';
-import { createServer } from 'http';
+import { createServer, type Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { createUploadRouter, ensureUploadDir } from './routes/upload.js';
+import { createUploadRouter, ensureUploadDir, UPLOAD_DIR } from './routes/upload.js';
+import { seedFromDisk, watchUploadDir } from './store/fileStore.js';
 import { createFilesRouter } from './routes/files.js';
 import { createInfoRouter } from './routes/info.js';
 
@@ -14,11 +15,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /**
  * Initialize Express server with all routes and Socket.IO
  */
-export function createApp(io: SocketIOServer): Express {
+export function createApp(io: SocketIOServer, httpServer: HttpServer): Express {
   const app = express();
 
-  // Ensure upload directory exists
+  // Ensure upload directory exists, seed from disk, then watch for external changes
   ensureUploadDir();
+  seedFromDisk(UPLOAD_DIR);
+  watchUploadDir(UPLOAD_DIR, io); // live-sync Finder/AirDrop drops without restart
 
   // Body parsing
   app.use(express.json());
@@ -57,6 +60,19 @@ export function createApp(io: SocketIOServer): Express {
   app.use('/api', createFilesRouter());
   app.use('/api', createInfoRouter());
 
+  // Graceful shutdown — emit event so all clients know, then close listener
+  app.post('/api/shutdown', (_req: Request, res: Response) => {
+    res.json({ ok: true });
+    logger.info('Shutdown requested — stopping server gracefully');
+    io.emit('server:stopping', {});
+    setTimeout(() => {
+      httpServer.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+      });
+    }, 800); // Give Socket.IO ~800ms to deliver the event before closing
+  });
+
   // Serve browser UI for all non-API routes (phones/browsers hitting the server)
   const browserUiPath = join(__dirname, 'browser-ui', 'index.html');
   app.get('/', (_req: Request, res: Response) => {
@@ -84,7 +100,7 @@ export async function startServer(): Promise<{
   });
 
   // Mount the express app after io is created so routes can use it
-  const app = createApp(io);
+  const app = createApp(io, server);
   server.on('request', app);
 
   // Setup Socket.IO connection handler

@@ -6,10 +6,10 @@
  * Electron discovers its port and exposes server info to the React UI via IPC.
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, utilityProcess, shell } from 'electron';
 import { join } from 'path';
 import { get as httpGet } from 'http';
-import { networkInterfaces, hostname } from 'os';
+import { networkInterfaces, hostname, homedir } from 'os';
 import QRCode from 'qrcode';
 import type { ServerStatusMessage, ServerInfo } from '@droplan/types';
 
@@ -94,14 +94,18 @@ async function createWindow(): Promise<void> {
     },
   });
 
+  // In dev: load Vite dev server. In production: load from extraResources.
   const devUrl = process.env['VITE_DEV_SERVER_URL'];
   if (devUrl) {
-    // Wait for Vite before loading so the preload script runs on a live page.
     await waitForUrl(devUrl);
     mainWindow.loadURL(devUrl);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(join(__dirname, '../client/dist/index.html'));
+    // extraResources puts the client build at Resources/client/
+    const clientIndex = app.isPackaged
+      ? join(process.resourcesPath, 'client', 'index.html')
+      : join(__dirname, '..', 'client', 'dist', 'index.html');
+    void mainWindow.loadFile(clientIndex);
   }
 
   mainWindow.on('closed', () => {
@@ -152,6 +156,48 @@ function setupIpcHandlers(): void {
       mainWindow.webContents.toggleDevTools();
     }
   });
+
+  // Reveal a specific file in macOS Finder (replaces download for local files)
+  ipcMain.handle('app:revealFile', (_event, filePath: string) => {
+    shell.showItemInFolder(filePath);
+  });
+
+  // Open the DropLAN downloads folder in Finder
+  ipcMain.handle('app:openDownloadFolder', () => {
+    void shell.openPath(join(homedir(), 'Downloads', 'DropLAN'));
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Production server                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * In production (packaged app), fork the Express server as an Electron
+ * utility process. utilityProcess runs with Electron's built-in Node.js
+ * and supports ESM — no external `node` binary required.
+ */
+async function startProductionServer(): Promise<void> {
+  // In a packaged .app, the server is bundled as an extraResource at Resources/server/
+  // In dev (this function is only called in production mode, but guarding anyway):
+  const serverMain = app.isPackaged
+    ? join(process.resourcesPath, 'server', 'main.js')
+    : join(__dirname, '..', 'server', 'main.js');
+
+  const proc = utilityProcess.fork(serverMain, [], {
+    env: { ...process.env, PORT: String(SERVER_PORT) },
+    stdio: 'pipe',
+  });
+
+  proc.stdout?.on('data', (d: Buffer) => process.stdout.write(d));
+  proc.stderr?.on('data', (d: Buffer) => process.stderr.write(d));
+
+  // Wait for the server to accept connections before opening the window
+  await waitForUrl(`http://localhost:${SERVER_PORT}/api/health`);
+
+  app.on('before-quit', () => {
+    proc.kill();
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -161,9 +207,15 @@ function setupIpcHandlers(): void {
 function setupEventHandlers(): void {
   app.on('ready', () => {
     setupIpcHandlers();
-    // createWindow is async; catch to prevent unhandled rejection
-    createWindow().catch((err: unknown) => {
-      console.error('[electron] Failed to create window:', err);
+    const startup = async () => {
+      // In production (no Vite URL), start the Express server via utilityProcess
+      if (!process.env['VITE_DEV_SERVER_URL']) {
+        await startProductionServer();
+      }
+      await createWindow();
+    };
+    startup().catch((err: unknown) => {
+      console.error('[electron] Startup failed:', err);
     });
   });
 

@@ -12,7 +12,8 @@
   "scripts": {
     "predev": "lsof -ti:3000,5173 2>/dev/null | xargs kill -9 2>/dev/null; sleep 0.3; true",
     "dev": "npm run build --workspace=packages/electron && npm run build --workspace=packages/server && concurrently \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\" \"npm run dev --workspace=packages/electron\"",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspaces --if-present",
+    "package:mac": "npm run build --workspaces --if-present && npm run build --workspace=packages/client && (cd packages/electron && npx electron-builder --mac)",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
