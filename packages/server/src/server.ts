@@ -3,6 +3,7 @@ import { createServer, type Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { Bonjour } from 'bonjour-service';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { createUploadRouter, ensureUploadDir, UPLOAD_DIR } from './routes/upload.js';
@@ -103,11 +104,25 @@ export async function startServer(): Promise<{
   const app = createApp(io, server);
   server.on('request', app);
 
-  // Setup Socket.IO connection handler
+  // Track connected phone count (excludes the Electron renderer connection)
+  let phoneCount = 0;
   io.on('connection', (socket) => {
-    logger.info(`Client connected: ${socket.id}`);
+    const clientType = socket.handshake.query['type'] as string | undefined;
+    const isPhone = clientType === 'phone';
+
+    logger.info(`Client connected: ${socket.id} (type=${clientType ?? 'unknown'})`);
+
+    if (isPhone) {
+      phoneCount++;
+      io.emit('server:connections', { count: phoneCount });
+    }
+
     socket.on('disconnect', () => {
       logger.info(`Client disconnected: ${socket.id}`);
+      if (isPhone) {
+        phoneCount--;
+        io.emit('server:connections', { count: phoneCount });
+      }
     });
   });
 
@@ -115,6 +130,12 @@ export async function startServer(): Promise<{
     server.listen(config.server.port, '0.0.0.0', () => {
       const port = (server.address() as { port: number }).port;
       logger.info(`Server listening on port ${port}`);
+
+      // Advertise via mDNS/Bonjour so iOS Safari can reach http://mac.local:PORT
+      const bonjour = new Bonjour();
+      bonjour.publish({ name: 'DropLAN', type: 'droplan', protocol: 'tcp', port });
+      logger.info(`mDNS: advertised as DropLAN._droplan._tcp.local on port ${port}`);
+
       resolve({ server, io, port });
     });
 

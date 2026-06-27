@@ -17,6 +17,7 @@ import type { ServerInfo } from '@droplan/types';
 
 export interface UploadProgress {
   uploadId: string;
+  filename: string;
   pct: number;
   received: number;
   total: number;
@@ -27,6 +28,9 @@ export default function App(): JSX.Element {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'stopped'>('connecting');
   const [activeUploads, setActiveUploads] = useState<UploadProgress[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [connectedDevices, setConnectedDevices] = useState(0);
+  // Unread count: increments per file received, resets when window regains focus
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // ── IPC: get server info ──────────────────────────────────────────────────
   useEffect(() => {
@@ -66,9 +70,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!serverInfo?.port) return;
 
+    // Tag this connection as the Electron renderer so the server excludes it from phone count
     const sock = connectSocket(`http://localhost:${serverInfo.port}`, {
       reconnectionAttempts: 10,
       transports: ['websocket', 'polling'],
+      query: { type: 'renderer' },
     });
 
     // Real-time upload progress
@@ -84,6 +90,22 @@ export default function App(): JSX.Element {
           setActiveUploads((prev) => prev.filter((u) => u.uploadId !== data.uploadId));
         }, 2000);
       }
+    });
+
+    // New file arrived — native notification when window is not the frontmost app (B1 fix)
+    sock.on('file:received', (file: { name: string }) => {
+      setUnreadCount((n) => n + 1); // B4: increment unread badge
+      if (!document.hasFocus() && window.electron) {
+        void (window.electron.invoke as (ch: string, arg: unknown) => Promise<unknown>)(
+          'app:notify',
+          { title: 'DropLAN — File Received', body: file.name },
+        );
+      }
+    });
+
+    // Live phone count (server only counts type=phone sockets now)
+    sock.on('server:connections', ({ count }: { count: number }) => {
+      setConnectedDevices(count);
     });
 
     // Server stopping (triggered by stop-sharing button or process exit)
@@ -112,6 +134,25 @@ export default function App(): JSX.Element {
   }, [serverInfo?.port]);
 
   const isStopped = status === 'stopped';
+
+  // B4: Reset unread count when window regains focus; sync Dock badge
+  useEffect(() => {
+    const handleFocus = () => {
+      setUnreadCount(0);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // B4: Update Dock badge whenever unreadCount changes
+  useEffect(() => {
+    if (window.electron) {
+      void (window.electron.invoke as (ch: string, arg: unknown) => Promise<unknown>)(
+        'app:setDockBadge',
+        unreadCount > 0 ? String(unreadCount) : '',
+      );
+    }
+  }, [unreadCount]);
 
   return (
     <div className="app">
@@ -145,7 +186,7 @@ export default function App(): JSX.Element {
       <div className="layout">
         {/* Left: QR + connection info */}
         <aside className="sidebar">
-          <QRPanel />
+          <QRPanel connectedDevices={connectedDevices} />
 
           <div className="sidebar-info">
             <div className="info-row">
@@ -186,7 +227,9 @@ export default function App(): JSX.Element {
               {activeUploads.map((u) => (
                 <div key={u.uploadId} className="active-upload-item">
                   <div className="active-upload-header">
-                    <span className="active-upload-label">⬆ Incoming file</span>
+                    <span className="active-upload-label">
+                      ⬆ {u.filename.length > 30 ? u.filename.slice(0, 28) + '…' : u.filename}
+                    </span>
                     <span className="active-upload-pct">{u.pct}%</span>
                     <span className="active-upload-bytes">
                       {formatBytes(u.received)} / {formatBytes(u.total)}

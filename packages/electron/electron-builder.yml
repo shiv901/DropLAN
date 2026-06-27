@@ -42,8 +42,7 @@ extraResources:
 # macOS
 mac:
   category: public.app-category.utilities
-  # Remove icon line until an icon.icns is created — electron-builder uses a default otherwise
-  # icon: build/icon.icns
+  icon: build/icon.icns
   target:
     - target: dmg
       arch:

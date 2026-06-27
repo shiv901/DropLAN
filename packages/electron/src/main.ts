@@ -6,7 +6,7 @@
  * Electron discovers its port and exposes server info to the React UI via IPC.
  */
 
-import { app, BrowserWindow, ipcMain, utilityProcess, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, utilityProcess, shell, Notification as ElectronNotification } from 'electron';
 import { join } from 'path';
 import { get as httpGet } from 'http';
 import { networkInterfaces, hostname, homedir } from 'os';
@@ -135,11 +135,15 @@ function setupIpcHandlers(): void {
       margin: 2,
       color: { dark: '#ffffff', light: '#00000000' },
     });
+    // Build mDNS URL — macOS Bonjour uses <hostname>.local
+    const mdnsHostname = `${hostname()}.local`;
+    const mdnsUrl = `http://${mdnsHostname}:${SERVER_PORT}`;
     return {
       port: SERVER_PORT,
       lanUrl,
       qrDataUrl,
       hostname: hostname(),
+      mdnsUrl,
     };
   });
 
@@ -157,14 +161,26 @@ function setupIpcHandlers(): void {
     }
   });
 
-  // Reveal a specific file in macOS Finder (replaces download for local files)
+  // Open a specific file with its default application (Preview, Photos, etc.)
   ipcMain.handle('app:revealFile', (_event, filePath: string) => {
-    shell.showItemInFolder(filePath);
+    void shell.openPath(filePath);
   });
 
   // Open the DropLAN downloads folder in Finder
   ipcMain.handle('app:openDownloadFolder', () => {
     void shell.openPath(join(homedir(), 'Downloads', 'DropLAN'));
+  });
+
+  // Show a native macOS notification (called by renderer on file:received)
+  ipcMain.handle('app:notify', (_event, { title, body }: { title: string; body: string }) => {
+    if (ElectronNotification.isSupported()) {
+      new ElectronNotification({ title, body, silent: false }).show();
+    }
+  });
+
+  // Update the Dock icon badge (file count). Empty string clears the badge.
+  ipcMain.handle('app:setDockBadge', (_event, label: string) => {
+    app.dock?.setBadge(label);
   });
 }
 

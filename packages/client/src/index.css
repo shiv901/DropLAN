@@ -251,6 +251,49 @@ html, body, #root {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ------------------------------------------------------------------ */
+/*  Connected device badge                                              */
+/* ------------------------------------------------------------------ */
+.device-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 5px 0 8px;
+}
+
+.device-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.device-badge--active .device-badge-dot {
+  background: #4ade80;
+  opacity: 1;
+  box-shadow: 0 0 6px #4ade8088;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.device-badge--active {
+  color: #4ade80;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 4px #4ade8066; }
+  50%       { box-shadow: 0 0 10px #4ade80cc; }
+}
+
+.info-value--mono {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+}
+
 .qr-url-row {
   display: flex;
   align-items: center;

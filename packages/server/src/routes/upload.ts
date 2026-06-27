@@ -82,13 +82,25 @@ function trackProgress(
 
     const uploadId = randomUUID();
     let received = 0;
+    let filename = 'file'; // will be replaced once we see the first multipart header
+    let headerParsed = false;
 
-    io.emit('upload:progress', { uploadId, pct: 0, received: 0, total });
+    io.emit('upload:progress', { uploadId, filename, pct: 0, received: 0, total });
 
     req.on('data', (chunk: Buffer) => {
       received += chunk.length;
+
+      // Extract filename from the first multipart chunk (always starts with headers)
+      if (!headerParsed) {
+        headerParsed = true;
+        const header = chunk.toString('utf8', 0, Math.min(chunk.length, 512));
+        const match = /filename="([^"]+)"/.exec(header);
+        if (match?.[1]) filename = decodeURIComponent(match[1]);
+      }
+
       io.emit('upload:progress', {
         uploadId,
+        filename,
         pct: Math.min(99, Math.round((received / total) * 100)),
         received,
         total,
@@ -96,7 +108,7 @@ function trackProgress(
     });
 
     req.on('end', () => {
-      io.emit('upload:progress', { uploadId, pct: 100, received: total, total });
+      io.emit('upload:progress', { uploadId, filename, pct: 100, received: total, total });
     });
 
     next();

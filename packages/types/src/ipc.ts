@@ -26,6 +26,10 @@ export interface IpcInvokeChannels {
   'app:revealFile': string;
   /** Open ~/Downloads/DropLAN in Finder */
   'app:openDownloadFolder': void;
+  /** Show a native macOS notification */
+  'app:notify': { title: string; body: string };
+  /** Update the Dock icon badge with a count (empty string clears it) */
+  'app:setDockBadge': string;
 }
 
 /**
@@ -76,6 +80,8 @@ export interface ServerInfo {
   lanUrl: string;
   qrDataUrl: string;
   hostname: string;
+  /** mDNS hostname — e.g. http://Shivs-MacBook.local:3000 (undefined if not resolved) */
+  mdnsUrl?: string;
 }
 
 /**

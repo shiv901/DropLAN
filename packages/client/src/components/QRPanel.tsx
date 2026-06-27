@@ -1,12 +1,16 @@
 /**
- * QRPanel — displays the QR code, LAN URL, and copy button
+ * QRPanel — displays the QR code, LAN URL, and connected device count
  * Fetches server info via Electron IPC with retry logic
  */
 
 import { useEffect, useState } from 'react';
 import type { ServerInfo } from '@droplan/types';
 
-export function QRPanel(): JSX.Element {
+interface Props {
+  connectedDevices?: number;
+}
+
+export function QRPanel({ connectedDevices = 0 }: Props): JSX.Element {
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
@@ -77,6 +81,14 @@ export function QRPanel(): JSX.Element {
             <div className="qr-spinner" />
           </div>
         )}
+      </div>
+
+      {/* Connected device count badge */}
+      <div className={`device-badge ${connectedDevices > 0 ? 'device-badge--active' : ''}`}>
+        <span className="device-badge-dot" />
+        {connectedDevices > 0
+          ? `${connectedDevices} device${connectedDevices !== 1 ? 's' : ''} connected`
+          : 'No devices connected'}
       </div>
 
       {info && (

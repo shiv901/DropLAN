@@ -601,7 +601,7 @@
         script.src = '/socket.io/socket.io.js';
         script.onload = () => {
           // eslint-disable-next-line no-undef
-          const sock = io({ transports: ['websocket', 'polling'] });
+          const sock = io({ transports: ['websocket', 'polling'], query: { type: 'phone' } });
 
           sock.on('server:stopping', () => {
             // Disable the upload zone

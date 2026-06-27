@@ -16,6 +16,8 @@ const ALLOWED_INVOKE_CHANNELS: Set<keyof IpcInvokeChannels> = new Set([
   'app:getServerInfo',
   'app:revealFile',
   'app:openDownloadFolder',
+  'app:notify',
+  'app:setDockBadge',
 ]);
 
 /**

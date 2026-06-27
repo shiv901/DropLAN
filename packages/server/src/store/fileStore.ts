@@ -131,9 +131,19 @@ export function watchUploadDir(dir: string, io: SocketIOServer): void {
 /* ------------------------------------------------------------------ */
 
 /**
- * Register a newly uploaded file
+ * Register a newly uploaded file.
+ * If the diskPath is already registered (e.g. the watcher picked it up mid-write),
+ * update the entry with the final size/name instead of creating a duplicate.
  */
 export function registerFile(params: { name: string; size: number; diskPath: string }): StoredFile {
+  // Upsert: same path = same file; update rather than duplicate
+  const existing = findByDiskPath(params.diskPath);
+  if (existing) {
+    const updated: StoredFile = { ...existing, name: params.name, size: params.size };
+    files.set(existing.id, updated);
+    return updated;
+  }
+
   const file: StoredFile = {
     id: randomUUID(),
     name: params.name,

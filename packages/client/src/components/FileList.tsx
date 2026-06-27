@@ -177,14 +177,14 @@ export function FileList({ serverPort, socket, disabled = false, onOpenFolder }:
                 ) : (
                   <div className="file-item-actions">
                     {!disabled && isElectron && file.diskPath && (
-                      /* In Electron: reveal in Finder instead of downloading */
+                      /* In Electron: open in default app (Preview/Photos/QuickTime) */
                       <button
-                        id={`reveal-${file.id}`}
+                        id={`open-${file.id}`}
                         className="file-action-btn file-action-reveal"
                         onClick={() => revealInFinder(file.diskPath!)}
-                        title="Reveal in Finder"
+                        title="Open in default app"
                       >
-                        🔍
+                        👁
                       </button>
                     )}
                     {!disabled && !isElectron && (
