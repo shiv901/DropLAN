@@ -80,7 +80,9 @@ export interface ServerInfo {
   lanUrl: string;
   qrDataUrl: string;
   hostname: string;
-  /** mDNS hostname — e.g. http://Shivs-MacBook.local:3000 (undefined if not resolved) */
+  /** 4-digit PIN — displayed in UI and embedded in QR URL */
+  sessionCode: string;
+  /** mDNS hostname — e.g. http://Shivs-MacBook.local:3000 */
   mdnsUrl?: string;
 }
 

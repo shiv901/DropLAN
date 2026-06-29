@@ -60,7 +60,7 @@ export function QRPanel({ connectedDevices = 0 }: Props): JSX.Element {
       /* ignore */
     }
   };
-
+  console.log(info?.sessionCode)
   return (
     <div className="qr-panel">
       <div className="qr-header">
@@ -97,6 +97,18 @@ export function QRPanel({ connectedDevices = 0 }: Props): JSX.Element {
           <button className="copy-btn" onClick={copyUrl} title="Copy URL">
             {copied ? '✓' : '⎘'}
           </button>
+        </div>
+      )}
+
+      {/* Manual entry PIN — shown when server info is available */}
+      {info?.sessionCode && (
+        <div className="pin-display">
+          <span className="pin-display-label">No camera? Enter this code at the URL above</span>
+          <div className="pin-display-boxes">
+            {info.sessionCode.split('').map((digit, i) => (
+              <span key={i} className="pin-display-box">{digit}</span>
+            ))}
+          </div>
         </div>
       )}
 

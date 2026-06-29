@@ -1,140 +1,87 @@
-# Electron Security Documentation
+# Security
 
-## Overview
+## Threat Model
 
-DropLAN uses Electron to provide a cross-platform desktop application with security-first principles. This document outlines all security measures implemented.
+DropLAN is designed for **trusted local networks** (home, small office). It is NOT designed to be exposed to the internet or used on adversarial networks (public Wi-Fi, corporate with unknown peers).
 
-## Security Settings
+---
 
-All Electron windows are configured with mandatory security settings:
+## Authentication: Session PIN
 
-```typescript
-webPreferences: {
-  contextIsolation: true,      // Renderer cannot access Node.js APIs
-  sandbox: true,               // Renderer runs in sandboxed environment
-  nodeIntegration: false,      // No require() in renderer
-  webSecurity: true            // Strict CORS enforcement
-}
+- A **4-digit PIN** is generated randomly at server startup using `Math.floor(1000 + Math.random() * 9000)`.
+- The PIN is displayed in the Electron UI and embedded in the QR code URL (`?c=1234`).
+- Phones must authenticate via `POST /api/auth` (manual PIN entry) or by scanning the QR (auto-auth via `GET /?c=1234`).
+- On success, the server sets two cookies:
+  - `droplan_sess` — 32-byte hex session token, `HttpOnly; SameSite=Strict; Path=/`. In-memory, cleared on restart.
+  - `droplan_device` — stable device UUID, `SameSite=Strict; Path=/; Max-Age=31536000` (1 year). For device identity.
+
+**Why `HttpOnly`**: Cannot be read or stolen by JavaScript — protects against XSS attacks on the phone browser.
+
+**Why `SameSite=Strict`**: Browser will not send the cookie on cross-site requests — CSRF protection. Also means the cookie is automatically included in the WebSocket upgrade handshake without any JS plumbing.
+
+- The PIN resets every server restart. Old sessions are invalidated.
+
+---
+
+## Middleware: `requireAuth`
+
+Location: `packages/server/src/middleware/requireAuth.ts`
+
+```
+Request from 127.0.0.1 / ::1 / ::ffff:127.0.0.1  →  always next() (Electron trusted)
+Request with valid droplan_sess cookie             →  next()
+Otherwise                                          →  401 Unauthorized
 ```
 
-### Why Each Setting Matters
+Applied to all `/api/*` routes except: `/api/health`, `/api/auth`, `/api/status`.
 
-- **contextIsolation**: Prevents renderer from accessing dangerous Node.js APIs
-- **sandbox**: Additional OS-level process isolation
-- **nodeIntegration**: Eliminates require() which could load any Node.js module
-- **webSecurity**: Prevents loading resources from untrusted sources
+---
 
-## IPC Communication
+## Socket.IO Auth Middleware
 
-### Channel Whitelist
-
-Only specific IPC channels are allowed:
-
-**Invoke Channels (Renderer → Main):**
-
-- `server:status` — Get server status
-- `app:quit` — Gracefully quit application
-- `app:getVersion` — Get app version
-- `app:openDevTools` — Toggle developer tools
-
-**Send Channels (Main → Renderer):**
-
-- `server:status` — Server status updates
-- `transfer:progress` — Transfer progress notifications
-- `transfer:complete` — Transfer completion notification
-- `error:fatal` — Fatal error notification
-
-### Validation
-
-All IPC channels are validated:
-
-1. Request comes through contextBridge wrapper
-2. Channel is checked against whitelist
-3. Only whitelisted channels are allowed
-4. Unauthorized attempts throw errors
-
-## Preload Script
-
-The preload script uses `contextBridge` to safely expose only necessary APIs:
-
-```typescript
-contextBridge.exposeInMainWorld('electron', {
-  invoke: (channel, args) => ipcRenderer.invoke(channel, args),
-  on: (channel, callback) => ipcRenderer.on(channel, callback),
-  removeListener: (channel, callback) => ipcRenderer.removeListener(channel, callback),
+```ts
+io.use((socket, next) => {
+  if (socket.handshake.query.type === 'renderer') return next();  // Electron trusted
+  const token = parseCookie(socket.handshake.headers.cookie, 'droplan_sess');
+  if (isValidSession(token)) return next();
+  next(new Error('Unauthorized'));
 });
 ```
 
-All channel access is validated before calling the underlying ipcRenderer methods.
+Unauthenticated phones cannot subscribe to `file:received` or any other event.
 
-## What's NOT Exposed
+---
 
-Renderer process has NO access to:
+## Localhost-Only: `GET /api/session-code`
 
-- ✗ `process` object
-- ✗ `require()` function
-- ✗ `eval()` or `Function()` constructor
-- ✗ File system APIs (fs, fs/promises)
-- ✗ Child process APIs
-- ✗ Operating system APIs
-- ✗ Any other Node.js modules
+Returns the PIN. Only accessible from `127.0.0.1` / `::1` (returns 403 otherwise). Used exclusively by the Electron main process.
 
-## Production vs Development
+---
 
-**Development Mode:**
+## Electron Security
 
-- Dev tools enabled for debugging
-- Vite dev server loaded over localhost
-- Full source maps for debugging
+- `contextIsolation: true`, `nodeIntegration: false` — renderer cannot access Node APIs directly.
+- `webSecurity: true` — standard browser security model enforced.
+- `sandbox: false` — required because the preload loads `require('./security')`. With `sandbox: true`, this `require` fails silently and `window.electron` is never defined. Security is maintained by `contextIsolation` (the actual boundary), not sandbox.
+- All Node access goes through `preload.ts` via `contextBridge`.
+- `security.ts` — additional `webRequest` guards and permission request handlers.
+- `trafficLightPosition: { x: 16, y: 16 }` — macOS-only; positions traffic lights inside the custom titlebar. Without it, traffic lights overlap header content at the default position.
 
-**Production Mode:**
+---
 
-- Dev tools disabled
-- Packaged app loaded from dist
-- No access to development features
-- Code minified and obfuscated
+## What Is NOT Protected
 
-## Security Audit Checklist
+- **Brute-force** — No rate limit on `POST /api/auth`. 10,000 guesses for a 4-digit PIN is feasible. Future: 3-attempt lockout.
+- **PIN in plain text comparison** — `code.trim() === SESSION_CODE`. The PIN is short-lived and already visible on screen; `argon2` is in `server/package.json` but unused (future hardening).
+- **Download without knowing filename** — `GET /api/files/:id/download` is protected by auth, but no per-file access control beyond session.
+- **Encryption in transit** — Plain HTTP. LAN eavesdropping is possible.
+- **Public network safety** — PIN is visible on the Mac screen. Avoid use on untrusted networks.
 
-- ✓ Context isolation enabled
-- ✓ Sandbox enabled
-- ✓ Node integration disabled
-- ✓ Preload script implemented
-- ✓ IPC channels whitelisted
-- ✓ Dev tools only in development
-- ✓ No eval() or Function()
-- ✓ HTTPS enforced for external resources
+---
 
-## Security Best Practices
+## Future
 
-### When Adding New IPC Channels
-
-1. **Define the channel in types**: Add to `IpcInvokeChannels` or `IpcSendChannels`
-2. **Add to whitelist**: Update `ALLOWED_INVOKE_CHANNELS` or `ALLOWED_SEND_CHANNELS` in `security.ts`
-3. **Implement in main**: Handle in `ipcMain.handle()` in `main.ts`
-4. **Test validation**: Ensure channel validation tests pass
-5. **Document in this file**
-
-### Code Review Checklist
-
-- [ ] No use of `eval()`
-- [ ] No use of `Function()` constructor
-- [ ] No dynamic require()
-- [ ] All IPC channels whitelisted
-- [ ] No access to `process` object
-- [ ] No dangerouslySetInnerHTML equivalents
-- [ ] No loading of arbitrary external resources
-- [ ] Security test coverage added
-
-## Known Limitations
-
-- Single-process mode is disabled (security requirement)
-- No arbitrary script execution
-- No access to user's file system outside app directories
-- Limited to IPC for main process communication
-
-## Further Reading
-
-- [Electron Security Documentation](https://www.electronjs.org/docs/tutorial/security)
-- [OWASP Security Guidelines](https://owasp.org/www-project-desktop-app-security-top-10/)
-- [Chromium Security](https://chromium.googlesource.com/chromium/src/+/main/docs/security/index.md)
+- [ ] Rate limit on `/api/auth` (3 attempts, then lockout with exponential backoff)
+- [ ] Configurable PIN length (settings panel)
+- [ ] Request-to-connect mode (phone requests, Mac must approve)
+- [ ] HTTPS via self-signed cert (for encrypted LAN transport)

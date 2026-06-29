@@ -54,19 +54,48 @@ async function waitForUrl(url: string, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const ready = await new Promise<boolean>((resolve) => {
-      const req = httpGet(url, () => {
-        resolve(true);
-      });
+      const req = httpGet(url, () => { resolve(true); });
       req.on('error', () => resolve(false));
-      req.setTimeout(1000, () => {
-        req.destroy();
-        resolve(false);
-      });
+      req.setTimeout(1000, () => { req.destroy(); resolve(false); });
     });
-    if (ready) return; // URL is responding
+    if (ready) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 300));
   }
-  // Timeout — proceed anyway; Electron will show its own error if Vite isn't ready
+}
+
+/** Fetch the session PIN from the local server, retrying until the server is ready */
+async function fetchSessionCode(): Promise<string> {
+  const maxAttempts = 20; // up to 10 s (20 × 500 ms)
+
+  const tryOnce = (): Promise<string> =>
+    new Promise((resolve) => {
+      // Use 127.0.0.1 explicitly — 'localhost' on macOS resolves to ::1 (IPv6)
+      // but the server binds to 0.0.0.0 (IPv4 only), causing ECONNREFUSED.
+      const req = httpGet(`http://127.0.0.1:${SERVER_PORT}/api/session-code`, (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data) as { code?: string };
+            // Validate: must be a 4-digit numeric string
+            resolve(/^\d{4}$/.test(parsed.code ?? '') ? (parsed.code as string) : '');
+          } catch {
+            resolve('');
+          }
+        });
+      });
+      req.on('error', () => resolve(''));
+      req.setTimeout(800, () => { req.destroy(); resolve(''); });
+    });
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const code = await tryOnce();
+    if (code) return code;
+    // Wait before retrying (server may not be ready yet)
+    await new Promise<void>((r) => setTimeout(r, 500));
+  }
+
+  return '0000'; // unreachable in normal operation
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,19 +159,21 @@ function setupIpcHandlers(): void {
 
   // Server info including QR code as data URL
   ipcMain.handle('app:getServerInfo', async (): Promise<ServerInfo> => {
-    const qrDataUrl = await QRCode.toDataURL(lanUrl, {
+    const sessionCode = await fetchSessionCode();
+    // QR URL includes the PIN so scanning auto-authenticates the phone
+    const qrUrl = `${lanUrl}?c=${sessionCode}`;
+    const qrDataUrl = await QRCode.toDataURL(qrUrl, {
       width: 200,
       margin: 2,
       color: { dark: '#ffffff', light: '#00000000' },
     });
-    // Build mDNS URL — macOS Bonjour uses <hostname>.local
-    const mdnsHostname = `${hostname()}.local`;
-    const mdnsUrl = `http://${mdnsHostname}:${SERVER_PORT}`;
+    const mdnsUrl = `http://${hostname()}.local:${SERVER_PORT}`;
     return {
       port: SERVER_PORT,
-      lanUrl,
-      qrDataUrl,
+      lanUrl,          // clean URL shown in sidebar (without PIN)
+      qrDataUrl,       // QR encodes lanUrl + ?c=PIN
       hostname: hostname(),
+      sessionCode,     // 4-digit PIN shown in QR panel
       mdnsUrl,
     };
   });
