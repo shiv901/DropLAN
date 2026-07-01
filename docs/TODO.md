@@ -6,16 +6,17 @@ Priority: 🟠 High → 🟡 Medium → 🟢 Future/Parked
 
 ## 🟠 High Priority
 
-- [ ] **Settings panel** — ⚙️ drawer in titlebar
-  - Change download folder (currently hardcoded to `~/Downloads/DropLAN`)
+- [x] **Settings panel** — ⚙️ drawer in titlebar
+  - Change download folder (live change, no restart)
   - Toggle "launch at login"
-  - Toggle "show in menu bar" (future)
-  - PIN length (default 4)
+  - PIN length: 4-digit / 6-digit / No PIN (takes effect on restart)
+  - No-PIN option raises a "request-to-connect" notice (future feature)
 
-- [ ] **Error handling on upload failures**
-  - Disk full / permission denied → catch in multer middleware
-  - Emit `upload:error` socket event with user-friendly message
-  - Show error toast on phone browser UI
+- [x] **Error handling on upload failures**
+  - Multer error handler in `upload.ts` catches `ENOSPC`, `EACCES`, `EPERM`, `EROFS`, `LIMIT_FILE_SIZE`
+  - Emits `upload:error` socket event with user-friendly message
+  - Phone browser: toast via `upload:error` socket listener
+  - Electron UI: dismissible red banner in the content area (auto-hides after 8s)
 
 ---
 
@@ -26,7 +27,7 @@ Priority: 🟠 High → 🟡 Medium → 🟢 Future/Parked
 - [ ] **Sort & filter file list** — sort by name/size/date; search by filename
 - [ ] **Multiple upload queue UI** — "3 of 5 files uploading" summary instead of stacked progress bars
 - [ ] **Rate limiting on `/api/auth`** — 3 attempts then lockout (brute-force protection for 4-digit PIN)
-- [ ] **Device count badge** — needs live phone test to confirm socket lifecycle behaviour (see KNOWN_ISSUES.md KI-3)
+- [x] **Device count badge** — fixed (KI-3): phone sockets now accepted at socket level; registration gated on valid session cookie; phone transport order changed to polling-first for reliable cookie delivery
 
 ---
 

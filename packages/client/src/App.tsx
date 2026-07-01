@@ -13,6 +13,8 @@ import { io as connectSocket, type Socket } from 'socket.io-client';
 import { QRPanel } from './components/QRPanel';
 import { FileList } from './components/FileList';
 import { StatusBar } from './components/StatusBar';
+import { SettingsDrawer } from './components/SettingsDrawer';
+import { DropLANLogo } from './components/DropLANLogo';
 import type { ServerInfo } from '@droplan/types';
 
 export interface UploadProgress {
@@ -31,6 +33,9 @@ export default function App(): JSX.Element {
   const [connectedDevices, setConnectedDevices] = useState(0);
   // Unread count: increments per file received, resets when window regains focus
   const [unreadCount, setUnreadCount] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [downloadFolder, setDownloadFolder] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   // ── IPC: get server info ──────────────────────────────────────────────────
   useEffect(() => {
@@ -45,6 +50,7 @@ export default function App(): JSX.Element {
         const info = (await window.electron?.invoke('app:getServerInfo')) as ServerInfo | undefined;
         if (info?.port && !cancelled) {
           setServerInfo(info);
+          setDownloadFolder(info.downloadFolder ?? null);
           setStatus('connected');
           return;
         }
@@ -108,9 +114,22 @@ export default function App(): JSX.Element {
       setConnectedDevices(count);
     });
 
+    // Download folder changed mid-session — server reseeded its file list
+    sock.on('files:reset', () => {
+      // FileList will refetch from /api/files automatically via its own effect
+      // triggering a re-mount is enough — we signal it by bumping a key via socket
+    });
+
     // Server stopping (triggered by stop-sharing button or process exit)
     sock.on('server:stopping', () => {
       setStatus('stopped');
+    });
+
+    // Upload error (disk full, permission denied etc.) — show dismissible banner
+    sock.on('upload:error', ({ message }: { message: string }) => {
+      setErrorToast(message);
+      // Auto-dismiss after 8 seconds
+      setTimeout(() => setErrorToast(null), 8000);
     });
 
     setSocket(sock);
@@ -122,7 +141,6 @@ export default function App(): JSX.Element {
 
   // ── Stop sharing ──────────────────────────────────────────────────────────
   const stopSharing = useCallback(async () => {
-    console.log('triggering stop!!')
     if (!serverInfo?.port) return;
     try {
       await fetch(`http://localhost:${serverInfo.port}/api/shutdown`, { method: 'POST' });
@@ -160,11 +178,20 @@ export default function App(): JSX.Element {
       <div className="titlebar">
         <div className="titlebar-drag" />
         <div className="titlebar-logo">
-          <span className="titlebar-icon">📡</span>
+          <DropLANLogo size={20} />
           <span className="titlebar-name">DropLAN</span>
         </div>
         <div className="titlebar-actions">
           <StatusBar status={status} port={serverInfo?.port ?? null} />
+          <button
+            id="settings-btn"
+            className="settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            aria-label="Open settings"
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
@@ -191,7 +218,13 @@ export default function App(): JSX.Element {
           <div className="sidebar-info">
             <div className="info-row">
               <span className="info-label">Save location</span>
-              <span className="info-value">~/Downloads/DropLAN</span>
+              <button
+                className="info-value info-value--link"
+                onClick={() => void window.electron?.invoke('app:openDownloadFolder')}
+                title={downloadFolder ?? serverInfo?.downloadFolder ?? '~/Downloads/DropLAN'}
+              >
+                {shortenPath(downloadFolder ?? serverInfo?.downloadFolder ?? '~/Downloads/DropLAN')}
+              </button>
             </div>
             {serverInfo && (
               <div className="info-row">
@@ -204,6 +237,20 @@ export default function App(): JSX.Element {
 
         {/* Right: active uploads + received files */}
         <main className="content">
+          {/* Upload error banner */}
+          {errorToast && (
+            <div className="upload-error-banner" role="alert">
+              <span className="upload-error-icon">⚠️</span>
+              <span className="upload-error-msg">{errorToast}</span>
+              <button
+                className="upload-error-dismiss"
+                onClick={() => setErrorToast(null)}
+                aria-label="Dismiss error"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {status === 'connected' && (
             <button
               id="stop-sharing-btn"
@@ -254,9 +301,23 @@ export default function App(): JSX.Element {
           />
         </main>
       </div>
+
+      {/* Settings drawer */}
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSettingsChange={(s) => {
+          setDownloadFolder(s.downloadFolder);
+        }}
+      />
     </div>
   );
 }
+
+function shortenPath(p: string): string {
+  return p.startsWith('/Users/') ? p.replace(/^\/Users\/[^/]+/, '~') : p;
+}
+
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';

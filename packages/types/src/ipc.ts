@@ -3,6 +3,8 @@
  * Type-safe communication between Electron main process and React renderer
  */
 
+import type { AppSettings } from './settings';
+
 /**
  * Server status - sent from main process when server starts
  */
@@ -30,6 +32,14 @@ export interface IpcInvokeChannels {
   'app:notify': { title: string; body: string };
   /** Update the Dock icon badge with a count (empty string clears it) */
   'app:setDockBadge': string;
+  /** Get current persisted settings */
+  'app:getSettings': void;
+  /** Save (partial) settings — returns the new full settings object */
+  'app:saveSettings': Partial<AppSettings>;
+  /** Open native folder picker — returns absolute path or null if cancelled */
+  'app:selectFolder': void;
+  /** Returns whether "Open at Login" is currently enabled */
+  'app:getLoginItemEnabled': void;
 }
 
 /**
@@ -84,6 +94,8 @@ export interface ServerInfo {
   sessionCode: string;
   /** mDNS hostname — e.g. http://Shivs-MacBook.local:3000 */
   mdnsUrl?: string;
+  /** Absolute path where received files are saved (from settings) */
+  downloadFolder?: string;
 }
 
 /**

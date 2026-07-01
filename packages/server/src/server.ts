@@ -7,8 +7,8 @@ import { randomUUID } from 'crypto';
 import { Bonjour } from 'bonjour-service';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { createUploadRouter, ensureUploadDir, UPLOAD_DIR } from './routes/upload.js';
-import { seedFromDisk, watchUploadDir } from './store/fileStore.js';
+import { createUploadRouter, ensureUploadDir, UPLOAD_DIR, setUploadDir } from './routes/upload.js';
+import { seedFromDisk, watchUploadDir, changeWatchDir } from './store/fileStore.js';
 import { createFilesRouter } from './routes/files.js';
 import { createInfoRouter } from './routes/info.js';
 import {
@@ -112,6 +112,24 @@ export function createApp(io: SocketIOServer, httpServer: HttpServer): Express {
     res.json({ devices: listDevices() });
   });
 
+  // Live folder change — Electron calls this when user changes download folder in Settings.
+  // Localhost-only. Updates upload dir + reseeds file list + rewatches without restart.
+  app.post('/api/admin/set-download-folder', (req: Request, res: Response) => {
+    const isLocal = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+    if (!isLocal) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const { folder } = req.body as { folder?: string };
+    if (!folder || typeof folder !== 'string') {
+      res.status(400).json({ error: 'folder is required' });
+      return;
+    }
+
+    setUploadDir(folder);
+    changeWatchDir(folder, io);
+    res.json({ ok: true, folder });
+    logger.info(`Download folder changed to: ${folder}`);
+  });
+
   // Graceful shutdown
   app.post('/api/shutdown', (_req: Request, res: Response) => {
     res.json({ ok: true });
@@ -156,35 +174,75 @@ export function createApp(io: SocketIOServer, httpServer: HttpServer): Express {
 }
 
 /**
- * Start the server and return HTTP server + Socket.IO instance
+ * Start the server and return HTTP server + Socket.IO instance.
+ *
+ * Correct setup order:
+ *   1. Create Express app (needs io for routes, but io needs server — solved below)
+ *   2. Create HTTP server with a placeholder handler
+ *   3. Create Socket.IO on top of HTTP server
+ *   4. Build Express app (now io exists) and hand it to the HTTP server
+ *
+ * Why NOT `server.on('request', app)`:
+ *   Socket.IO's polling transport uses regular HTTP GET/POST requests to /socket.io/.
+ *   When both Socket.IO and Express are attached to the same server via `server.on('request', ...)`
+ *   both handlers fire for polling requests → Express tries to set headers on an already-sent
+ *   response → ERR_HTTP_HEADERS_SENT spam + broken polling → no device count updates.
+ *
+ * The correct pattern is `createServer(app)`:
+ *   Express becomes the default HTTP handler. Socket.IO intercepts its own path via the
+ *   server-level 'upgrade' event (WebSocket) and by overriding the request handler internally
+ *   for /socket.io/* paths — Express never sees those requests.
  */
 export async function startServer(): Promise<{
   server: ReturnType<typeof createServer>;
   io: SocketIOServer;
   port: number;
 }> {
-  const server = createServer();
+  // Use a mutable handler reference so we can pass a function to createServer()
+  // upfront (before the Express app exists) and then swap it in once io is ready.
+  // This avoids the chicken-and-egg: createServer needs a handler, createApp needs io,
+  // io needs server. With this pattern Socket.IO intercepts /socket.io/* internally
+  // before Express ever sees those requests — no ERR_HTTP_HEADERS_SENT.
+  let handler: express.Express | null = null;
 
+  const server = createServer((req, res) => {
+    if (handler) {
+      handler(req, res);
+    } else {
+      res.writeHead(503);
+      res.end('Starting…');
+    }
+  });
+
+  // Socket.IO — attaches to the HTTP server
   const io = new SocketIOServer(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
   });
 
-  // Mount the express app after io is created so routes can use it
+  // Build the real Express app (needs io for emitting socket events in routes)
   const app = createApp(io, server);
-  server.on('request', app);
 
-  // Socket.IO auth middleware — phones must have a valid session cookie
+  // Swap in the real handler — from this point all non-socket.io HTTP requests go to Express
+  handler = app;
+
+  // Socket.IO auth middleware — phone sockets are accepted at socket level.
+  // Device registration is gated on session cookie in the connection handler.
+  // Unauthenticated phones can receive broadcast events (server:stopping etc.)
+  // but cannot upload (HTTP auth blocks that via requireAuth middleware).
   io.use((socket, next) => {
     const clientType = socket.handshake.query['type'] as string | undefined;
 
     // Electron renderer is always trusted
     if (clientType === 'renderer') return next();
 
-    // Phone clients — validate session cookie sent automatically with the WS upgrade
+    // Phone clients — accept all, check session in connection handler
+    if (clientType === 'phone') return next();
+
+    // Unknown type — require a valid session
     const sessionToken = getSessionFromCookie(socket.handshake.headers.cookie);
     if (sessionToken && isValidSession(sessionToken)) return next();
 
-    logger.warn(`Socket rejected (no valid session): ${socket.id}`);
+    logger.warn(`Socket rejected (unknown type, no valid session): ${socket.id}`);
     next(new Error('Unauthorized'));
   });
 
@@ -196,16 +254,25 @@ export async function startServer(): Promise<{
     logger.info(`Client connected: ${socket.id} (type=${clientType ?? 'unknown'})`);
 
     if (isPhone) {
-      const ua = socket.handshake.headers['user-agent'];
-      const existingDeviceId = getDeviceIdFromCookie(socket.handshake.headers.cookie);
-      registerDevice(socket.id, ua, existingDeviceId);
-      // Broadcast updated device list + count to all (Electron shows this)
-      io.emit('server:connections', { count: getDeviceCount(), devices: listDevices() });
+      // Only register as a device if the phone has a valid session cookie
+      const sessionToken = getSessionFromCookie(socket.handshake.headers.cookie);
+      const isAuthenticated = !!(sessionToken && isValidSession(sessionToken));
+
+      if (isAuthenticated) {
+        const ua = socket.handshake.headers['user-agent'];
+        const existingDeviceId = getDeviceIdFromCookie(socket.handshake.headers.cookie);
+        registerDevice(socket.id, ua, existingDeviceId);
+        io.emit('server:connections', { count: getDeviceCount(), devices: listDevices() });
+        logger.info(`Device registered: ${socket.id} (count=${getDeviceCount()})`);
+      } else {
+        logger.info(`Phone connected but not yet authenticated: ${socket.id}`);
+      }
     }
 
     socket.on('disconnect', () => {
       logger.info(`Client disconnected: ${socket.id}`);
       if (isPhone) {
+        // no-op if socket was never registered (unauthenticated phone)
         removeDeviceBySocket(socket.id);
         io.emit('server:connections', { count: getDeviceCount(), devices: listDevices() });
       }

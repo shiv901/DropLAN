@@ -4,6 +4,51 @@ All notable changes in chronological order. Most recent first.
 
 ---
 
+## [0.5.0] — 2026-07-01 — Resilient Uploads & Phone Reconnection
+
+### Fixed
+- **Premature "file received" on partial uploads**: `fs.watch` was firing during multer's write, registering the file before it was complete. Fixed with an `activeUploads` Set in `fileStore.ts` — the watcher skips any path currently being written by multer.
+- **Partial files saved after abort**: Added `req.on('close')` detection in the upload route. When the connection drops mid-upload, multer-written partial files are deleted from disk, `upload:error` is emitted, and `file:received` is never sent.
+- **Phone shows disconnected with no recovery path**: The phone browser now has a full reconnection overlay (frosted glass + spinner) with Socket.IO auto-retry. After 5 failed attempts a "Reload page" button appears. On reconnect the upload zone is re-enabled and a "✓ Reconnected" toast shows.
+- **Session expiry after DropLAN restart**: XHR 401 responses on `/api/upload` are now intercepted — the reconnect overlay switches to "Session expired" mode with a reload prompt.
+
+---
+
+## [0.4.0] — 2026-07-01 — Device Count Fix & Upload Error Handling
+
+### Fixed
+- **`ERR_HTTP_HEADERS_SENT` / device count stuck at 0 (KI-3)**: Root cause was `server.on('request', app)` — Socket.IO polling requests hit both the Socket.IO internal handler and Express, causing double header writes, broken polling, and phones never reaching a stable connected state. Fixed by using a mutable-handler pattern: `createServer((req,res) => handler(req,res))` with the Express app swapped in after `io` is ready. Socket.IO now intercepts `/socket.io/*` before Express sees those requests.
+- Phone browser transport order changed to `['polling', 'websocket']` so the session cookie is reliably present on the first socket handshake (mobile Safari doesn't always forward cookies in WS upgrade headers).
+
+### Added
+- **Upload error handling** — multer errors and disk/OS errors are now caught by a dedicated Express error handler in `upload.ts`:
+  - Error codes handled: `ENOSPC` (disk full), `EACCES`/`EPERM` (permission denied), `EROFS` (read-only volume), `LIMIT_FILE_SIZE` (file too large)
+  - Emits `upload:error` socket event with a user-friendly message
+  - **Phone browser**: shows an error toast via `upload:error` socket listener
+  - **Electron UI**: shows a dismissible red banner in the content area (auto-hides after 8 seconds)
+
+---
+
+## [0.3.0] — 2026-06-29 — Settings Panel & Logo Fix
+
+### Added
+- **Settings panel** (`⚙` button in titlebar) — slide-in drawer with:
+  - **Download folder** — native folder picker; change takes effect immediately (no restart). Server reseeds the file registry and all clients receive the updated list via `files:reset` socket event.
+  - **Launch at Login** toggle — calls `app.setLoginItemSettings` immediately.
+  - **PIN mode selector** — 4-digit (default), 6-digit, or No PIN. No-PIN shows a notice explaining the future request-to-connect flow. Changes take effect on next server restart.
+- **`AppSettings`** type in `@droplan/types` — persisted to `~/Library/Application Support/DropLAN/settings.json`
+- **`POST /api/admin/set-download-folder`** — localhost-only endpoint called by Electron when folder changes; calls `setUploadDir` + `fileStore.changeWatchDir`
+- **`fileStore.changeWatchDir`** — closes old `fs.watch` watcher, clears registry, reseeds from new dir, emits `files:reset` to all clients
+- **Logo unified** — titlebar now uses the `DropLANLogo` SVG component (WiFi arc + water drop, purple gradient) matching the `.app` icon; replaced the mismatched 📡 emoji
+
+### Fixed
+- Removed stale `@tailwind` directives from `index.css` (project uses vanilla CSS)
+- Removed leftover `console.log` in `QRPanel.tsx` and `App.tsx`
+- `app:openDownloadFolder` IPC now opens the user-configured folder instead of the hardcoded `~/Downloads/DropLAN`
+
+---
+
+
 ## [0.2.0] — 2026-06-27 — Session Authentication
 
 ### Added

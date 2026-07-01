@@ -315,6 +315,73 @@
         border-color: var(--error);
         color: var(--error);
       }
+
+      /* ── Reconnect overlay ───────────────────────────────────────────── */
+      #reconnect-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 15, 19, 0.88);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadein 0.2s ease;
+      }
+
+      @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+      .reconnect-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 36px 28px;
+        text-align: center;
+        max-width: 300px;
+        width: 90%;
+      }
+
+      .reconnect-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin-slow 0.9s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin-slow { to { transform: rotate(360deg); } }
+
+      .reconnect-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+
+      .reconnect-subtitle {
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        margin-bottom: 20px;
+      }
+
+      .reconnect-reload-btn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        transition: opacity 0.15s;
+      }
+
+      .reconnect-reload-btn:hover { opacity: 0.85; }
     </style>
   </head>
   <body>
@@ -342,6 +409,19 @@
     <div id="file-list"></div>
 
     <div id="toast"></div>
+
+    <!-- Reconnection overlay — shown when socket drops, hidden on reconnect -->
+    <div id="reconnect-overlay" style="display:none">
+      <div class="reconnect-card">
+        <div class="reconnect-spinner"></div>
+        <p class="reconnect-title" id="reconnect-title">Connection lost</p>
+        <p class="reconnect-subtitle" id="reconnect-subtitle">Reconnecting to DropLAN…</p>
+        <button class="reconnect-reload-btn" id="reconnect-reload-btn" style="display:none"
+          onclick="window.location.reload()">
+          Reload page
+        </button>
+      </div>
+    </div>
 
     <script>
       /* ------------------------------------------------------------------ */
@@ -593,7 +673,7 @@
       }
 
       /* ------------------------------------------------------------------ */
-      /*  Socket.IO — real-time server:stopping notification                 */
+      /*  Socket.IO — reconnection, server events, upload errors             */
       /* ------------------------------------------------------------------ */
       (function () {
         // Load socket.io-client from the server itself (served automatically by Socket.IO)
@@ -601,10 +681,85 @@
         script.src = '/socket.io/socket.io.js';
         script.onload = () => {
           // eslint-disable-next-line no-undef
-          const sock = io({ transports: ['websocket', 'polling'], query: { type: 'phone' } });
+          // polling first: ensures session cookie is sent on initial handshake (mobile Safari
+          // may not forward cookies in the WebSocket upgrade). Socket.IO upgrades to WS after.
+          const sock = io({
+            transports: ['polling', 'websocket'],
+            query: { type: 'phone' },
+            reconnectionAttempts: Infinity, // keep trying forever
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 8000,
+          });
+
+          // ── Reconnection overlay helpers ────────────────────────────────
+          const overlay   = document.getElementById('reconnect-overlay');
+          const titleEl   = document.getElementById('reconnect-title');
+          const subtitleEl = document.getElementById('reconnect-subtitle');
+          const reloadBtn = document.getElementById('reconnect-reload-btn');
+          let reconnectAttempt = 0;
+          let sessionExpired = false;
+
+          function showReconnectOverlay(reason) {
+            if (!overlay) return;
+            reconnectAttempt = 0;
+            sessionExpired = false;
+            reloadBtn.style.display = 'none';
+            titleEl.textContent = reason === 'io server disconnect'
+              ? 'DropLAN stopped'
+              : 'Connection lost';
+            subtitleEl.textContent = reason === 'io server disconnect'
+              ? 'DropLAN was closed on the host Mac. Waiting for it to come back…'
+              : 'Reconnecting to DropLAN…';
+            overlay.style.display = 'flex';
+          }
+
+          function hideReconnectOverlay() {
+            if (overlay) overlay.style.display = 'none';
+            reloadBtn.style.display = 'none';
+          }
+
+          // ── Socket lifecycle ────────────────────────────────────────────
+
+          sock.on('disconnect', (reason) => {
+            showReconnectOverlay(reason);
+          });
+
+          sock.on('reconnect_attempt', (attempt) => {
+            reconnectAttempt = attempt;
+            subtitleEl.textContent = `Reconnecting… (attempt ${attempt})`;
+            // Show reload button after 5 failed attempts so user isn't stuck
+            if (attempt >= 5) {
+              reloadBtn.style.display = 'block';
+            }
+          });
+
+          sock.on('connect', () => {
+            if (sessionExpired) {
+              // Session was invalidated (DropLAN restarted) — need re-auth
+              window.location.href = '/';
+              return;
+            }
+            hideReconnectOverlay();
+            // Re-enable upload zone if it was disabled by reconnect (not by server:stopping)
+            const zone = document.getElementById('drop-zone');
+            const input = document.getElementById('file-input');
+            if (zone && zone.dataset.stoppedByServer !== 'true') {
+              zone.style.opacity = '';
+              zone.style.pointerEvents = '';
+            }
+            if (input && zone && zone.dataset.stoppedByServer !== 'true') {
+              input.disabled = false;
+            }
+            showToast('✓ Reconnected', 'success');
+          });
+
+          sock.on('connect_error', () => {
+            // Keep overlay visible; reconnect_attempt will update the text
+          });
+
+          // ── Server events ───────────────────────────────────────────────
 
           sock.on('server:stopping', () => {
-            // Disable the upload zone
             const zone = document.getElementById('drop-zone');
             const input = document.getElementById('file-input');
             if (zone) {
@@ -612,18 +767,40 @@
               zone.style.pointerEvents = 'none';
               zone.querySelector('h2').textContent = 'Server stopped';
               zone.querySelector('p').textContent = 'The host has stopped DropLAN';
+              zone.dataset.stoppedByServer = 'true';
             }
             if (input) input.disabled = true;
 
-            // Show persistent banner
             showToast('🔴 Server stopped — uploads disabled', 'error');
             const toast = document.getElementById('toast');
             if (toast) {
-              // Keep it visible permanently
               toast.style.transition = 'none';
               toast.style.transform = 'translateX(-50%) translateY(0)';
             }
           });
+
+          // Server-side upload errors (disk full, permission denied, aborted, etc.)
+          sock.on('upload:error', ({ message }) => {
+            showToast(`⚠️ ${message}`, 'error');
+          });
+
+          // ── Session expiry detection ────────────────────────────────────
+          // After reconnect, XHR uploads may get 401 if DropLAN was restarted
+          // (new server process = new session store). Intercept XHR errors to detect this.
+          const origOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+            this.addEventListener('load', function () {
+              if (this.status === 401 && url.toString().includes('/api/upload')) {
+                sessionExpired = true;
+                // Show overlay with a message about session expiry
+                titleEl.textContent = 'Session expired';
+                subtitleEl.textContent = 'DropLAN was restarted. You need to re-scan the QR code or reload the page.';
+                reloadBtn.style.display = 'block';
+                if (overlay) overlay.style.display = 'flex';
+              }
+            });
+            return origOpen.call(this, method, url, ...rest);
+          };
         };
         document.head.appendChild(script);
       })();

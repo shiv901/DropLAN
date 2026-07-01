@@ -1,6 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* ------------------------------------------------------------------ */
 /*  Design tokens                                                       */
@@ -790,4 +787,470 @@ html, body, #root {
 .confirm-btn--no:hover {
   color: var(--text);
   border-color: var(--border-hover);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Titlebar: settings gear button                                      */
+/* ------------------------------------------------------------------ */
+.settings-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+.settings-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sidebar: save location as clickable link                            */
+/* ------------------------------------------------------------------ */
+.info-value--link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--accent-hover);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  max-width: 160px;
+  transition: color 0.15s;
+}
+
+.info-value--link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings drawer backdrop                                            */
+/* ------------------------------------------------------------------ */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  pointer-events: none;
+  z-index: 90;
+  transition: background 0.25s ease;
+}
+
+.settings-backdrop--visible {
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings drawer panel                                               */
+/* ------------------------------------------------------------------ */
+.settings-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.28s ease;
+  box-shadow: none;
+}
+
+.settings-drawer--open {
+  transform: translateX(0);
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.6);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings header                                                     */
+/* ------------------------------------------------------------------ */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: var(--titlebar-h);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.settings-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+
+.settings-close-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-close-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings body                                                       */
+/* ------------------------------------------------------------------ */
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 24px;
+}
+
+.settings-body::-webkit-scrollbar { width: 4px; }
+.settings-body::-webkit-scrollbar-track { background: transparent; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ------------------------------------------------------------------ */
+/*  Settings section                                                    */
+/* ------------------------------------------------------------------ */
+.settings-section {
+  padding: 20px 20px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 14px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings row                                                        */
+/* ------------------------------------------------------------------ */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0 10px;
+}
+
+.settings-row--column {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-label-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Download folder row                                                 */
+/* ------------------------------------------------------------------ */
+.settings-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.settings-folder-path {
+  flex: 1;
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-folder-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface3);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.settings-folder-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.settings-folder-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Toggle switch                                                       */
+/* ------------------------------------------------------------------ */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-toggle input[type='checkbox'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-toggle-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.settings-toggle input:checked + .settings-toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.settings-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.settings-toggle input:checked + .settings-toggle-track .settings-toggle-thumb {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* ------------------------------------------------------------------ */
+/*  PIN mode radio options                                              */
+/* ------------------------------------------------------------------ */
+.settings-pin-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.settings-pin-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.settings-pin-option:hover {
+  border-color: var(--border-hover);
+}
+
+.settings-pin-option--active {
+  border-color: var(--accent);
+  background: rgba(124, 109, 250, 0.08);
+}
+
+.settings-pin-option input[type='radio'] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.settings-pin-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-pin-option strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-pin-option small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/*  No-PIN notice banner                                                */
+/* ------------------------------------------------------------------ */
+.settings-pin-notice {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.settings-pin-notice-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.settings-pin-notice em {
+  color: var(--warning);
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading state                                                       */
+/* ------------------------------------------------------------------ */
+.settings-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Saved toast                                                         */
+/* ------------------------------------------------------------------ */
+.settings-saved-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--success);
+  color: #0d0d12;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 20px;
+  animation: fade-in 0.2s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload error banner                                                  */
+/* ------------------------------------------------------------------ */
+.upload-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  animation: fade-in 0.2s ease;
+}
+
+.upload-error-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.upload-error-msg {
+  flex: 1;
+  font-size: 13px;
+  color: var(--error);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.upload-error-dismiss {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: transparent;
+  color: var(--error);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.upload-error-dismiss:hover {
+  background: rgba(248, 113, 113, 0.15);
 }

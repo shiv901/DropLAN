@@ -18,6 +18,10 @@ const ALLOWED_INVOKE_CHANNELS: Set<keyof IpcInvokeChannels> = new Set([
   'app:openDownloadFolder',
   'app:notify',
   'app:setDockBadge',
+  'app:getSettings',
+  'app:saveSettings',
+  'app:selectFolder',
+  'app:getLoginItemEnabled',
 ]);
 
 /**

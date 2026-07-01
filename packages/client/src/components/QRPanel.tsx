@@ -60,7 +60,6 @@ export function QRPanel({ connectedDevices = 0 }: Props): JSX.Element {
       /* ignore */
     }
   };
-  console.log(info?.sessionCode)
   return (
     <div className="qr-panel">
       <div className="qr-header">

@@ -2,12 +2,7 @@
 
 ## Active
 
-### KI-3 — Device count shows 0 (needs live test)
-
-- **Symptom**: Device badge shows 0 even when a phone is connected.
-- **Root cause (suspected)**: Phone socket may be connecting before authentication cookie is set, causing the socket auth middleware to reject it. Or phone browser puts the socket to sleep.
-- **Fix implemented**: Socket type tagging (`type=phone`/`type=renderer`), device registry, server-side count. Not verified with a real phone holding an open socket connection.
-- **Status**: Parked. Needs real phone test.
+_No active known issues._
 
 ---
 
@@ -15,6 +10,7 @@
 
 | Issue | Fix |
 |---|---|
+| **KI-3** — Device count shows 0 / ERR_HTTP_HEADERS_SENT spam | **Root cause**: `server.on('request', app)` caused Socket.IO polling requests to hit both the Socket.IO internal handler AND Express → double header writes → broken polling → phone sockets never authenticated → device count stuck at 0. **Fix**: Rewrote `startServer()` to use a mutable-handler pattern: `createServer((req,res) => handler(req,res))` with `handler` swapped to the real Express app once `io` is ready. Socket.IO intercepts `/socket.io/*` polling internally before Express ever sees those requests. Also changed phone transport order to `['polling','websocket']` for reliable cookie delivery. |
 | **KI-1** — PIN shows as `0000` | `fetchSessionCode()` changed to `http://127.0.0.1:3000/api/session-code`. `localhost` on macOS resolves to `::1` (IPv6) but Express binds to `0.0.0.0` (IPv4 only) → `ECONNREFUSED`. Also added 20-retry loop resolving to `''` on failure, not `'0000'`. Fix verified in code (`packages/electron/src/main.ts`). |
 | `auth.html` ENOENT on second build | Changed `cp -r src/browser-ui` → `cp -r src/browser-ui/.` in build script |
 | Duplicate file shown on upload | Upsert logic in `registerFile()` — same filename updates existing entry |

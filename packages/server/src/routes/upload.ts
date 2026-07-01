@@ -7,14 +7,20 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer';
 import { join } from 'path';
 import { homedir } from 'os';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, unlink } from 'fs';
 import { randomUUID } from 'crypto';
-import { registerFile } from '../store/fileStore.js';
+import { registerFile, markUploading, unmarkUploading } from '../store/fileStore.js';
 import { logger } from '../logger.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
-/** Where received files land on disk */
-export const UPLOAD_DIR = join(homedir(), 'Downloads', 'DropLAN');
+/** Where received files land on disk — configurable via env, defaults to ~/Downloads/DropLAN */
+export let UPLOAD_DIR = process.env['DOWNLOAD_FOLDER'] ?? join(homedir(), 'Downloads', 'DropLAN');
+
+/** Update the active upload directory at runtime (called when user changes folder in settings) */
+export function setUploadDir(newDir: string): void {
+  UPLOAD_DIR = newDir;
+  ensureUploadDir();
+}
 
 /** Ensure upload directory exists */
 export function ensureUploadDir(): void {
@@ -54,6 +60,7 @@ function uniqueFilename(dir: string, originalname: string): string {
 /**
  * Create multer storage that streams directly to disk.
  * Filenames preserve the original name; duplicates get a " (2)" suffix.
+ * Also calls markUploading() so the fs.watch watcher skips the partial write.
  */
 function createStorage(): multer.StorageEngine {
   return multer.diskStorage({
@@ -61,7 +68,10 @@ function createStorage(): multer.StorageEngine {
       cb(null, UPLOAD_DIR);
     },
     filename: (_req, file, cb) => {
-      cb(null, uniqueFilename(UPLOAD_DIR, file.originalname));
+      const name = uniqueFilename(UPLOAD_DIR, file.originalname);
+      // Mark as in-progress BEFORE multer opens the write stream
+      markUploading(join(UPLOAD_DIR, name));
+      cb(null, name);
     },
   });
 }
@@ -130,42 +140,122 @@ export function createUploadRouter(io: SocketIOServer): Router {
 
   /**
    * POST /api/upload
-   * Accepts single or multiple files as multipart/form-data field "files"
+   * Accepts single or multiple files as multipart/form-data field "files".
+   *
+   * Abort detection: wraps upload.array() manually so we can detect when the
+   * client closes the connection mid-upload. On abort:
+   *   - Partial files are deleted from disk
+   *   - They are NOT registered or emitted as file:received
+   *   - An upload:error socket event is emitted (Electron + phone show error banner)
    */
-  router.post('/upload', trackProgress(io), upload.array('files', 50), (req: Request, res: Response) => {
-    const uploadedFiles = req.files as Express.Multer.File[];
+  router.post('/upload', trackProgress(io), (req: Request, res: Response, next: NextFunction) => {
+    let aborted = false;
 
-    if (!uploadedFiles || uploadedFiles.length === 0) {
-      res.status(400).json({ error: 'No files received' });
-      return;
+    // Detect connection close BEFORE the response has been sent
+    const onClose = () => {
+      if (!res.writableEnded) aborted = true;
+    };
+    req.on('close', onClose);
+
+    upload.array('files', 50)(req, res, (err) => {
+      req.off('close', onClose); // clean up listener
+
+      const uploadedFiles = (req.files as Express.Multer.File[]) ?? [];
+
+      if (aborted) {
+        // Connection dropped mid-upload — delete partial files, emit error
+        uploadedFiles.forEach((f) => {
+          unmarkUploading(f.path);
+          unlink(f.path, () => {}); // best-effort delete
+          logger.warn(`Deleted partial file after abort: ${f.path}`);
+        });
+        io.emit('upload:error', {
+          message: 'Upload interrupted — connection was lost',
+          code: 'ECONNABORTED',
+        });
+        return; // don't send response; connection is already gone
+      }
+
+      if (err) { next(err); return; }
+
+      if (!uploadedFiles || uploadedFiles.length === 0) {
+        res.status(400).json({ error: 'No files received' });
+        return;
+      }
+
+      const received = uploadedFiles.map((f) => {
+        unmarkUploading(f.path); // done writing — let the watcher know it’s safe
+        const stored = registerFile({
+          name: f.originalname,
+          size: f.size,
+          diskPath: f.path,
+        });
+
+        logger.info(`File received: ${stored.name} (${stored.size} bytes) → ${f.path}`);
+
+        io.emit('file:received', {
+          id: stored.id,
+          name: stored.name,
+          size: stored.size,
+          receivedAt: stored.receivedAt,
+        });
+
+        return {
+          id: stored.id,
+          name: stored.name,
+          size: stored.size,
+          receivedAt: stored.receivedAt,
+        };
+      });
+
+      res.json({ uploaded: received });
+    });
+  });
+
+  /**
+   * Upload error handler — catches multer errors and disk/OS errors.
+   * Must be a 4-argument Express error handler (err, req, res, next).
+   *
+   * Error codes handled:
+   *   LIMIT_FILE_SIZE  — file exceeds multer's fileSize limit
+   *   ENOSPC           — no space left on device
+   *   EACCES / EPERM   — permission denied writing to download folder
+   *   EROFS            — read-only filesystem
+   */
+  router.use('/upload', (
+    err: Error & { code?: string; field?: string },
+    _req: Request,
+    res: Response,
+    _next: NextFunction,
+  ) => {
+    // Map low-level error codes to user-friendly messages
+    let userMessage = 'Upload failed — please try again';
+    const code = (err as NodeJS.ErrnoException).code ?? err.code ?? '';
+
+    if (code === 'LIMIT_FILE_SIZE') {
+      userMessage = 'File is too large to upload';
+    } else if (code === 'ENOSPC') {
+      userMessage = 'Upload failed — disk is full on the host machine';
+    } else if (code === 'EACCES' || code === 'EPERM') {
+      userMessage = 'Upload failed — permission denied writing to download folder';
+    } else if (code === 'EROFS') {
+      userMessage = 'Upload failed — download folder is on a read-only volume';
+    } else if (err.name === 'MulterError') {
+      userMessage = `Upload failed — ${err.message}`;
     }
 
-    const received = uploadedFiles.map((f) => {
-      const stored = registerFile({
-        name: f.originalname,
-        size: f.size,
-        diskPath: f.path,
-      });
+    logger.error(`Upload error (${code || err.name}): ${err.message}`);
 
-      logger.info(`File received: ${stored.name} (${stored.size} bytes) → ${f.path}`);
-
-      // Notify Electron UI via Socket.IO
-      io.emit('file:received', {
-        id: stored.id,
-        name: stored.name,
-        size: stored.size,
-        receivedAt: stored.receivedAt,
-      });
-
-      return {
-        id: stored.id,
-        name: stored.name,
-        size: stored.size,
-        receivedAt: stored.receivedAt,
-      };
+    // Emit upload:error so all clients (phone + Electron) can show a toast
+    io.emit('upload:error', {
+      message: userMessage,
+      code,
     });
 
-    res.json({ uploaded: received });
+    // Respond to the XHR with an error status
+    if (!res.headersSent) {
+      res.status(500).json({ error: userMessage });
+    }
   });
 
   return router;

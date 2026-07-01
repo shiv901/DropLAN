@@ -5,6 +5,7 @@
 
 export * from './ipc';
 export * from './config';
+export * from './settings';
 
 // Domain types
 export interface Transfer {

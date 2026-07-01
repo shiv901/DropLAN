@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { readdirSync, statSync, watch } from 'fs';
+import { readdirSync, statSync, watch, mkdirSync } from 'fs';
 import { join } from 'path';
 import type { ReceivedFile } from '@droplan/types';
 import type { Server as SocketIOServer } from 'socket.io';
@@ -18,6 +18,26 @@ export interface StoredFile extends ReceivedFile {
 }
 
 const files = new Map<string, StoredFile>();
+
+/**
+ * Paths of files currently being written by multer.
+ * The fs.watch watcher skips these so it doesn't emit 'file:received'
+ * for a partial/in-progress upload. The upload route removes the path
+ * once multer finishes (success) or aborts (cleanup).
+ */
+const activeUploads = new Set<string>();
+
+export function markUploading(diskPath: string): void {
+  activeUploads.add(diskPath);
+}
+
+export function unmarkUploading(diskPath: string): void {
+  activeUploads.delete(diskPath);
+}
+
+export function isUploading(diskPath: string): boolean {
+  return activeUploads.has(diskPath);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Read helpers                                                        */
@@ -79,7 +99,7 @@ export function seedFromDisk(dir: string): void {
  * - Files uploaded through the server itself are already in the registry
  *   before the watcher fires, so they are silently skipped.
  */
-export function watchUploadDir(dir: string, io: SocketIOServer): void {
+export function watchUploadDir(dir: string, io: SocketIOServer): ReturnType<typeof watch> {
   const debounce = new Map<string, ReturnType<typeof setTimeout>>();
 
   const watcher = watch(dir, { persistent: false }, (_eventType, filename) => {
@@ -101,6 +121,9 @@ export function watchUploadDir(dir: string, io: SocketIOServer): void {
 
           // Already registered (uploaded through the server) → skip
           if (findByDiskPath(diskPath)) return;
+
+          // Currently being written by multer → skip (will be registered by route handler on completion)
+          if (isUploading(diskPath)) return;
 
           // New file dropped externally — register and notify all clients
           const file = registerFile({ name: filename, size: stat.size, diskPath });
@@ -124,7 +147,42 @@ export function watchUploadDir(dir: string, io: SocketIOServer): void {
 
   // Clean up on process exit
   process.on('exit', () => watcher.close());
+
+  return watcher;
 }
+
+/** Active watcher — closed and replaced when changeWatchDir is called */
+let activeWatcher: ReturnType<typeof watch> | null = null;
+
+/**
+ * Switch the watched directory at runtime.
+ * - Stops the old watcher
+ * - Clears the in-memory file registry
+ * - Seeds the registry from the new directory
+ * - Starts a new watcher on the new directory
+ *
+ * Called by the server's admin endpoint when the user changes the download folder.
+ */
+export function changeWatchDir(newDir: string, io: SocketIOServer): void {
+  // Ensure the new directory exists synchronously
+  mkdirSync(newDir, { recursive: true });
+
+  // Close the old watcher if running
+  activeWatcher?.close();
+
+  // Clear current registry
+  files.clear();
+
+  // Reseed from new directory
+  seedFromDisk(newDir);
+
+  // Start fresh watcher and store reference
+  activeWatcher = watchUploadDir(newDir, io);
+
+  // Notify all connected clients of the reset file list
+  io.emit('files:reset', { files: listFiles() });
+}
+
 
 /* ------------------------------------------------------------------ */
 /*  CRUD                                                                */

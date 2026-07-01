@@ -88,12 +88,19 @@ export function FileList({ serverPort, socket, disabled = false, onOpenFolder }:
       setFiles((prev) => prev.filter((f) => f.id !== id));
     };
 
+    // Download folder changed: server reseeded its registry, refetch full list
+    const onReset = ({ files: newFiles }: { files: ReceivedFile[] }) => {
+      setFiles(newFiles ?? []);
+    };
+
     socket.on('file:received', onReceived);
     socket.on('file:removed', onRemoved);
+    socket.on('files:reset', onReset);
 
     return () => {
       socket.off('file:received', onReceived);
       socket.off('file:removed', onRemoved);
+      socket.off('files:reset', onReset);
     };
   }, [socket]);
 

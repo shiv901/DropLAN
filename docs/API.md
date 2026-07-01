@@ -120,15 +120,36 @@ Gracefully stop the server. Emits `server:stopping` to all sockets before closin
 
 ---
 
-## Socket.IO Events
+## Admin Endpoints (Localhost-Only)
+
+### `POST /api/admin/set-download-folder`
+Change the download folder at runtime — no server restart needed. Called by Electron after the user picks a new folder in Settings.
+
+**Request body:**
+```json
+{ "folder": "/Users/user/Documents/Drops" }
+```
+
+**Success (200):**
+```json
+{ "ok": true, "folder": "/Users/user/Documents/Drops" }
+```
+
+Returns 403 for non-localhost callers.
+
+---
+
 
 ### Server → Client
 
 | Event | Payload | Description |
 |---|---|---|
 | `file:received` | `{ id, name, size, receivedAt }` | New file uploaded by phone |
+| `file:removed` | `{ id }` | File deleted from disk |
+| `files:reset` | `{ files[] }` | Download folder changed — full file list reset |
 | `server:connections` | `{ count, devices[] }` | Phone connection count changed |
 | `upload:progress` | `{ uploadId, filename, pct, received, total }` | Upload progress update |
+| `upload:error` | `{ message, code }` | Upload failed server-side (disk full, permission denied, etc.) |
 | `server:stopping` | `{}` | Server about to shut down |
 
 ### Auth

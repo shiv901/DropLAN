@@ -6,17 +6,54 @@
  * Electron discovers its port and exposes server info to the React UI via IPC.
  */
 
-import { app, BrowserWindow, ipcMain, utilityProcess, shell, Notification as ElectronNotification } from 'electron';
+import { app, BrowserWindow, ipcMain, utilityProcess, shell, Notification as ElectronNotification, dialog } from 'electron';
 import { join } from 'path';
 import { get as httpGet } from 'http';
 import { networkInterfaces, hostname, homedir } from 'os';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import QRCode from 'qrcode';
-import type { ServerStatusMessage, ServerInfo } from '@droplan/types';
+import type { ServerStatusMessage, ServerInfo, AppSettings } from '@droplan/types';
 
 let mainWindow: BrowserWindow | null = null;
 
 /** Port where the Express server is running (set via env or default 3000) */
 const SERVER_PORT = parseInt(process.env['SERVER_PORT'] ?? '3000', 10);
+
+/* ------------------------------------------------------------------ */
+/*  Settings persistence                                                 */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_SETTINGS: AppSettings = {
+  downloadFolder: join(homedir(), 'Downloads', 'DropLAN'),
+  launchAtLogin: false,
+  pinLength: 4,
+};
+
+function settingsPath(): string {
+  return join(app.getPath('userData'), 'settings.json');
+}
+
+function loadSettings(): AppSettings {
+  try {
+    const raw = readFileSync(settingsPath(), 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(patch: Partial<AppSettings>): AppSettings {
+  const current = loadSettings();
+  const next: AppSettings = { ...current, ...patch };
+  try {
+    mkdirSync(app.getPath('userData'), { recursive: true });
+    writeFileSync(settingsPath(), JSON.stringify(next, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[electron] Failed to save settings:', err);
+  }
+  return next;
+}
 
 /* ------------------------------------------------------------------ */
 /*  LAN IP detection                                                    */
@@ -159,6 +196,7 @@ function setupIpcHandlers(): void {
 
   // Server info including QR code as data URL
   ipcMain.handle('app:getServerInfo', async (): Promise<ServerInfo> => {
+    const settings = loadSettings();
     const sessionCode = await fetchSessionCode();
     // QR URL includes the PIN so scanning auto-authenticates the phone
     const qrUrl = `${lanUrl}?c=${sessionCode}`;
@@ -175,6 +213,7 @@ function setupIpcHandlers(): void {
       hostname: hostname(),
       sessionCode,     // 4-digit PIN shown in QR panel
       mdnsUrl,
+      downloadFolder: settings.downloadFolder,
     };
   });
 
@@ -199,7 +238,8 @@ function setupIpcHandlers(): void {
 
   // Open the DropLAN downloads folder in Finder
   ipcMain.handle('app:openDownloadFolder', () => {
-    void shell.openPath(join(homedir(), 'Downloads', 'DropLAN'));
+    const settings = loadSettings();
+    void shell.openPath(settings.downloadFolder);
   });
 
   // Show a native macOS notification (called by renderer on file:received)
@@ -213,6 +253,53 @@ function setupIpcHandlers(): void {
   ipcMain.handle('app:setDockBadge', (_event, label: string) => {
     app.dock?.setBadge(label);
   });
+
+  // ── Settings IPC ─────────────────────────────────────────────────────────
+
+  ipcMain.handle('app:getSettings', (): AppSettings => {
+    return loadSettings();
+  });
+
+  ipcMain.handle('app:getLoginItemEnabled', (): boolean => {
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  ipcMain.handle('app:saveSettings', async (_event, patch: Partial<AppSettings>): Promise<AppSettings> => {
+    const next = saveSettings(patch);
+
+    // Apply loginItem change immediately
+    if ('launchAtLogin' in patch) {
+      app.setLoginItemSettings({ openAtLogin: next.launchAtLogin });
+    }
+
+    // Apply download folder change immediately — notify the server
+    if ('downloadFolder' in patch && patch.downloadFolder) {
+      try {
+        await fetch(
+          `http://127.0.0.1:${SERVER_PORT}/api/admin/set-download-folder`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder: patch.downloadFolder }),
+          }
+        );
+      } catch {
+        // Server may not be running yet — folder will be picked up on next start
+      }
+    }
+
+    return next;
+  });
+
+  ipcMain.handle('app:selectFolder', async (): Promise<string | null> => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose Download Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0] ?? null;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -225,14 +312,18 @@ function setupIpcHandlers(): void {
  * and supports ESM — no external `node` binary required.
  */
 async function startProductionServer(): Promise<void> {
-  // In a packaged .app, the server is bundled as an extraResource at Resources/server/
-  // In dev (this function is only called in production mode, but guarding anyway):
   const serverMain = app.isPackaged
     ? join(process.resourcesPath, 'server', 'main.js')
     : join(__dirname, '..', 'server', 'main.js');
 
+  const settings = loadSettings();
+
   const proc = utilityProcess.fork(serverMain, [], {
-    env: { ...process.env, PORT: String(SERVER_PORT) },
+    env: {
+      ...process.env,
+      PORT: String(SERVER_PORT),
+      DOWNLOAD_FOLDER: settings.downloadFolder,
+    },
     stdio: 'pipe',
   });
 
